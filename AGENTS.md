@@ -140,7 +140,7 @@ Notes / 说明:
 ### Documentation site (GitHub Pages)
 - Source content lives in `website/` (Nextra) and is the only hand-edited documentation source.
 - GitHub Pages serves the **root** of the `gh-pages` branch (Source: "Deploy from a branch", branch `gh-pages`, folder `/ (root)`). This is a one-time repository setting. The branch is generated and force-pushed by CI, so never commit to it by hand.
-- Live site: https://zero-labsco.github.io/zero_adaptive_link/
+- Live site: https://zero-labsco.github.io/zero-adaptive-link/
 - Builds run in CI, not locally: pushes to `main` touching `website/**` or `pubspec.yaml` trigger `docs.yml`.
 - To preview locally: `cd website && npm ci && npm run build` (output in `website/out/`), or `node website/scripts/sync-docs.mjs --ci`.
 - `pubspec.yaml` has a `documentation:` field pointing to the site (rendered on pub.dev). Keep it in sync after the site URL is stable.

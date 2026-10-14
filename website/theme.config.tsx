@@ -8,10 +8,10 @@ const config: DocsThemeConfig = {
     </span>
   ),
   project: {
-    link: 'https://github.com/zero-labsco/zero_adaptive_link'
+    link: 'https://github.com/zero-labsco/zero-adaptive-link'
   },
   docsRepositoryBase:
-    'https://github.com/zero-labsco/zero_adaptive_link/tree/main/website',
+    'https://github.com/zero-labsco/zero-adaptive-link/tree/main/website',
   footer: {
     content: 'Zero Adaptive Link · MPL-2.0'
   },
@@ -34,7 +34,7 @@ const config: DocsThemeConfig = {
   },
   head: (
     <>
-      <link rel="icon" href="/zero_adaptive_link/favicon.svg" type="image/svg+xml" />
+      <link rel="icon" href="/zero-adaptive-link/favicon.svg" type="image/svg+xml" />
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link
         rel="preconnect"

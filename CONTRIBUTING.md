@@ -48,7 +48,7 @@ This project is licensed under MPL-2.0. By participating, you are expected to up
 3. Add the upstream remote to keep your fork in sync:
 
    ```bash
-   git remote add upstream https://github.com/zero-labsco/zero_adaptive_link.git
+   git remote add upstream https://github.com/zero-labsco/zero-adaptive-link.git
    ```
 
 4. Install dependencies:
@@ -183,7 +183,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Reporting Bugs
 
-Use the [Bug Report template](https://github.com/zero-labsco/zero_adaptive_link/issues/new?template=bug_report.md). Please include:
+Use the [Bug Report template](https://github.com/zero-labsco/zero-adaptive-link/issues/new?template=bug_report.md). Please include:
 
 - Flutter / Dart version (`flutter doctor -v`)
 - Package version
@@ -196,9 +196,9 @@ Use the [Bug Report template](https://github.com/zero-labsco/zero_adaptive_link/
 
 ## Suggesting Enhancements
 
-Use the [Feature Request template](https://github.com/zero-labsco/zero_adaptive_link/issues/new?template=feature_request.md). For general discussion, please use [GitHub Discussions](https://github.com/zero-labsco/zero_adaptive_link/discussions) instead of opening an issue.
+Use the [Feature Request template](https://github.com/zero-labsco/zero-adaptive-link/issues/new?template=feature_request.md). For general discussion, please use [GitHub Discussions](https://github.com/zero-labsco/zero-adaptive-link/discussions) instead of opening an issue.
 
-> 功能建议请用 Feature Request 模板；一般性讨论请到 [GitHub Discussions](https://github.com/zero-labsco/zero_adaptive_link/discussions)，而非开 Issue。
+> 功能建议请用 Feature Request 模板；一般性讨论请到 [GitHub Discussions](https://github.com/zero-labsco/zero-adaptive-link/discussions)，而非开 Issue。
 
 ## Release Process
 

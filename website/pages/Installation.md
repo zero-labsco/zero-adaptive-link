@@ -19,7 +19,7 @@ flutter pub get
 dependencies:
   zero_adaptive_link:
     git:
-      url: https://github.com/zero-labsco/zero_adaptive_link.git
+      url: https://github.com/zero-labsco/zero-adaptive-link.git
       ref: release/v__ZAL_VERSION__   # replace __ZAL_VERSION__ with the version you need
 ```
 
@@ -47,8 +47,8 @@ The plugin is **pure Dart**: there are no `android/` or `ios/` directories, no m
 Run the bundled example:
 
 ```bash
-git clone https://github.com/zero-labsco/zero_adaptive_link.git
-cd zero_adaptive_link/example
+git clone https://github.com/zero-labsco/zero-adaptive-link.git
+cd zero-adaptive-link/example
 flutter run -d chrome
 ```
 

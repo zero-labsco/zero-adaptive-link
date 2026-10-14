@@ -10,8 +10,8 @@ const withNextra = nextra({
 export default withNextra({
   output: 'export',
   images: { unoptimized: true },
-  basePath: '/zero_adaptive_link',
-  assetPrefix: '/zero_adaptive_link',
+  basePath: '/zero-adaptive-link',
+  assetPrefix: '/zero-adaptive-link',
   trailingSlash: true,
   reactStrictMode: true
 })

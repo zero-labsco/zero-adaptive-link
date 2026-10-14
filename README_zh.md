@@ -10,16 +10,16 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 
 [![pub version](https://img.shields.io/pub/v/zero_adaptive_link.svg)](https://pub.dev/packages/zero_adaptive_link)
 [![pub points](https://img.shields.io/pub/points/zero_adaptive_link.svg)](https://pub.dev/packages/zero_adaptive_link/score)
-[![CI](https://github.com/zero-labsco/zero_adaptive_link/actions/workflows/ci.yml/badge.svg)](https://github.com/zero-labsco/zero_adaptive_link/actions/workflows/ci.yml)
-[![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-blue.svg)](https://github.com/zero-labsco/zero_adaptive_link/blob/main/LICENSE)
+[![CI](https://github.com/zero-labsco/zero-adaptive-link/actions/workflows/ci.yml/badge.svg)](https://github.com/zero-labsco/zero-adaptive-link/actions/workflows/ci.yml)
+[![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-blue.svg)](https://github.com/zero-labsco/zero-adaptive-link/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Web%20%7C%20Desktop-green.svg)](https://pub.dev/packages/zero_adaptive_link)
 [![Flutter](https://img.shields.io/badge/Flutter-✓-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 推荐升级：** 本插件首发 `0.1.0`：同一套 `onTap` 现在会按窗口宽度自动决策——compact / medium 推入新页面，expanded 展开侧栏 pane。建议所有用户升级到最新版本（`^0.1.0`）。
+> **🔔 推荐升级：** `0.1.1` 修正了已发布包的链接：`homepage`、`repository` 与 `documentation` 现在指向真实的 GitHub 仓库与 Pages 站点，pub.dev 上的文档链接可正常打开而不再 404。建议所有用户升级到最新版本（`^0.1.1`）。
 
-🌐 **[官方网站](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[pub.dev 页面](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[GitHub 仓库](https://github.com/zero-labsco/zero_adaptive_link)**
+🌐 **[官方网站](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[pub.dev 页面](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[GitHub 仓库](https://github.com/zero-labsco/zero-adaptive-link)**
 
 ---
 
@@ -68,7 +68,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.1.0
+  zero_adaptive_link: ^0.1.1
 ```
 
 ### GitHub
@@ -77,8 +77,8 @@ dependencies:
 dependencies:
   zero_adaptive_link:
     git:
-      url: https://github.com/zero-labsco/zero_adaptive_link.git
-      ref: release/v0.1.0   # 将 0.1.0 替换为所需版本
+      url: https://github.com/zero-labsco/zero-adaptive-link.git
+      ref: release/v0.1.1   # 将 0.1.1 替换为所需版本
 ```
 
 ---
@@ -253,9 +253,9 @@ SlidingPanes(
 
 欢迎贡献！提交 issue 或 pull request 前请先阅读[贡献指南](CONTRIBUTING.md)。
 
-- 🐛 [报告 Bug](https://github.com/zero-labsco/zero_adaptive_link/issues/new?template=bug_report.md)
-- 💡 [提出功能需求](https://github.com/zero-labsco/zero_adaptive_link/issues/new?template=feature_request.md)
-- 💬 [参与讨论](https://github.com/zero-labsco/zero_adaptive_link/discussions)
+- 🐛 [报告 Bug](https://github.com/zero-labsco/zero-adaptive-link/issues/new?template=bug_report.md)
+- 💡 [提出功能需求](https://github.com/zero-labsco/zero-adaptive-link/issues/new?template=feature_request.md)
+- 💬 [参与讨论](https://github.com/zero-labsco/zero-adaptive-link/discussions)
 - 📖 [贡献指南](CONTRIBUTING.md)
 
 ---

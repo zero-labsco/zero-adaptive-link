@@ -10,16 +10,16 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 
 [![pub version](https://img.shields.io/pub/v/zero_adaptive_link.svg)](https://pub.dev/packages/zero_adaptive_link)
 [![pub points](https://img.shields.io/pub/points/zero_adaptive_link.svg)](https://pub.dev/packages/zero_adaptive_link/score)
-[![CI](https://github.com/zero-labsco/zero_adaptive_link/actions/workflows/ci.yml/badge.svg)](https://github.com/zero-labsco/zero_adaptive_link/actions/workflows/ci.yml)
-[![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-blue.svg)](https://github.com/zero-labsco/zero_adaptive_link/blob/main/LICENSE)
+[![CI](https://github.com/zero-labsco/zero-adaptive-link/actions/workflows/ci.yml/badge.svg)](https://github.com/zero-labsco/zero-adaptive-link/actions/workflows/ci.yml)
+[![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-blue.svg)](https://github.com/zero-labsco/zero-adaptive-link/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Web%20%7C%20Desktop-green.svg)](https://pub.dev/packages/zero_adaptive_link)
 [![Flutter](https://img.shields.io/badge/Flutter-✓-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 Upgrade recommended:** This is the initial release (`0.1.0`): one `onTap` now adapts to the window width automatically — push a page on compact / medium, expand a sidebar pane on expanded. All users are encouraged to upgrade to the latest version (`^0.1.0`).
+> **🔔 Upgrade recommended:** `0.1.1` corrects the published package links: `homepage`, `repository` and `documentation` now point at the real GitHub repository and Pages site, so the documentation link on pub.dev resolves instead of 404-ing. All users are encouraged to upgrade to the latest version (`^0.1.1`).
 
-🌐 **[Official Website](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[View on pub.dev](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[View on GitHub](https://github.com/zero-labsco/zero_adaptive_link)**
+🌐 **[Official Website](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[View on pub.dev](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[View on GitHub](https://github.com/zero-labsco/zero-adaptive-link)**
 
 ---
 
@@ -70,7 +70,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.1.0
+  zero_adaptive_link: ^0.1.1
 ```
 
 ### GitHub
@@ -79,8 +79,8 @@ dependencies:
 dependencies:
   zero_adaptive_link:
     git:
-      url: https://github.com/zero-labsco/zero_adaptive_link.git
-      ref: release/v0.1.0   # replace 0.1.0 with the version you need
+      url: https://github.com/zero-labsco/zero-adaptive-link.git
+      ref: release/v0.1.1   # replace 0.1.1 with the version you need
 ```
 
 ---
@@ -273,9 +273,9 @@ SlidingPanes(
 
 Contributions are welcome! Please read the [Contributing Guidelines](CONTRIBUTING.md) before submitting issues or pull requests.
 
-- 🐛 [Report a Bug](https://github.com/zero-labsco/zero_adaptive_link/issues/new?template=bug_report.md)
-- 💡 [Request a Feature](https://github.com/zero-labsco/zero_adaptive_link/issues/new?template=feature_request.md)
-- 💬 [Join Discussions](https://github.com/zero-labsco/zero_adaptive_link/discussions)
+- 🐛 [Report a Bug](https://github.com/zero-labsco/zero-adaptive-link/issues/new?template=bug_report.md)
+- 💡 [Request a Feature](https://github.com/zero-labsco/zero-adaptive-link/issues/new?template=feature_request.md)
+- 💬 [Join Discussions](https://github.com/zero-labsco/zero-adaptive-link/discussions)
 - 📖 [Contributing Guide](CONTRIBUTING.md)
 
 ---

@@ -55,7 +55,7 @@ void open(BuildContext context) => ZeroNav.of(context).open('/products/42');
 
 ## 🔗 Links / 链接
 
-- [GitHub](https://github.com/zero-labsco/zero_adaptive_link)
+- [GitHub](https://github.com/zero-labsco/zero-adaptive-link)
 - [Official Website](https://www.zerolabsco.com/)
 - [pub.dev](https://pub.dev/packages/zero_adaptive_link)
 
