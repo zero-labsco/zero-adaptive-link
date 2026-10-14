@@ -1,0 +1,27 @@
+# Changelog
+
+## 0.1.0
+
+### Added / 新增
+- Added the `ZeroLink` widget: one declarative tap target whose behavior adapts to the window width — push a new page on compact / medium, expand or update the right sidebar pane on expanded, and focus an already visible pane instead of duplicating it.
+  - 新增 `ZeroLink` 组件：一套声明式点击目标，行为随窗口宽度自适应——compact / medium 推入新页面，expanded 展开或更新右侧侧栏 pane，目标 pane 已可见时聚焦而非重复展开。
+- Added `ZeroNav`, the imperative entry point with the same verbs as `NavigatorState` (`pushNamed`, `pushReplacementNamed`, `pushNamedAndRemoveUntil`, `popAndPushNamed`, `pop`, `maybePop`, `popFrom`, `maybePopFrom`, `popUntil`, `canPop`), plus `namedLocation` and `refresh` helpers.
+  - 新增 `ZeroNav` 命令式入口，导航动词与 `NavigatorState` 同名同签名（`pushNamed`、`pushReplacementNamed`、`pushNamedAndRemoveUntil`、`popAndPushNamed`、`pop`、`maybePop`、`popFrom`、`maybePopFrom`、`popUntil`、`canPop`），并提供 `namedLocation` 与 `refresh` 辅助方法。
+- Added the declarative route table: `ZeroRouter`, `ZeroShell`, `ZeroTab` and `ZeroRoute` with nested routes, `:param` segments, `name`, `title`, route-level and router-level `redirect` (with a `redirectLimit` of 5), `onExit`, `fullscreen` / `fullscreenDialog`, `opaque`, `barrierColor`, `barrierDismissible`, `transitionsBuilder` and `errorBuilder`.
+  - 新增声明式路由表：`ZeroRouter`、`ZeroShell`、`ZeroTab` 与 `ZeroRoute`，支持嵌套路由、`:param` 片段、`name`、`title`、路由级与路由表级 `redirect`（`redirectLimit` 默认 5）、`onExit`、`fullscreen` / `fullscreenDialog`、`opaque`、`barrierColor`、`barrierDismissible`、`transitionsBuilder` 与 `errorBuilder`。
+- Added the master-detail pane semantics: `SlidingPanes` (1/2 columns, slide-in detail with parallax master, draggable resize handle), `SlidingPane`, `Breadcrumbs`, `Breakpoints` and `BreakpointClass` — all usable without the router.
+  - 新增 master-detail pane 语义：`SlidingPanes`（单列 / 双列、detail 右滑入带 master 视差、可拖拽分割线）、`SlidingPane`、`Breadcrumbs`、`Breakpoints` 与 `BreakpointClass`——均可脱离路由单独使用。
+- Added configurable pane expansion direction: `SlidingPanesSide` plus the `side` / `paneSide` / `paneSideListenable` options, so the detail pane expands to the right (default, master on the left) or to the left (master on the right) — and `paneSideListenable` flips it at runtime without rebuilding the router.
+  - 新增可配置的展开方向：`SlidingPanesSide` 及 `side` / `paneSide` / `paneSideListenable` 选项，使 detail pane 可向右（默认，master 在左）或向左（master 在右）展开；`paneSideListenable` 可在运行时切换而无需重建路由。
+- Added configurable pane sizing: `leftPaneFraction` on `ZeroRouter` (the initial master pane fraction, previously fixed at `0.4`) and `maxLeftPaneWidth` on `ZeroRouter` / `SlidingPanes` — a pixel ceiling so the master pane still scales with the window but stops at a sane width on ultra-wide displays, with the detail pane absorbing the remainder. The ceiling applies to dragging too.
+  - 新增可配置的 pane 尺寸：`ZeroRouter` 上的 `leftPaneFraction`（master pane 初始占比，此前固定 `0.4`）与 `ZeroRouter` / `SlidingPanes` 上的 `maxLeftPaneWidth`——像素上限，使 master pane 仍随窗口缩放，但在超宽屏上停在合理宽度，剩余空间由 detail pane 吸收；拖拽同样受该上限约束。
+- Added window-width breakpoints (`600` / `840`) decoupled from the device type, so foldables, small desktop windows and browser zoom all classify correctly.
+  - 新增基于窗口宽度的断点（`600` / `840`），与设备类型解耦，折叠屏、桌面小窗与浏览器缩放都能正确归类。
+- Added URL addressability and deep links: every screen is in the route table, the web defaults to the hash strategy (`/#/products/42`) so GitHub Pages needs no 404 fallback, and browser back, refresh and deep links share the same location pipeline as in-app navigation.
+  - 新增 URL 可寻址与深链：每个页面都入表，Web 默认 hash 策略（`/#/products/42`），GitHub Pages 无需 404 fallback；浏览器返回、刷新、深链与应用内导航走同一条 location 管道。
+- Added `ZeroShellChrome` for the compact bottom `NavigationBar` rendered inside branch pages, so modal bottom sheets opened with `useRootNavigator: false` can cover it; pushed pages hide it by default (`hidesBottomBarWhenPushed`).
+  - 新增 `ZeroShellChrome`：compact 底部 `NavigationBar` 渲染进 branch 页面内部，`useRootNavigator: false` 打开的 bottom sheet 可覆盖它；push 的页面默认隐藏底部栏（`hidesBottomBarWhenPushed`）。
+- Added `ZeroShellScope`, `ZeroShellState`, `ZeroPaneScope`, `ZeroRouteState` and `ZeroRouteStateScope` for reading shell state, pane titles, path / query parameters and arguments from anywhere in the tree.
+  - 新增 `ZeroShellScope`、`ZeroShellState`、`ZeroPaneScope`、`ZeroRouteState` 与 `ZeroRouteStateScope`，可在树中任意位置读取 shell 状态、pane 标题、路径 / 查询参数与 arguments。
+- Added `ZeroNav.locationListenable`, a `ValueListenable<String>` for reactive UI via `ValueListenableBuilder` (zero runtime dependencies, no signals).
+  - 新增 `ZeroNav.locationListenable`：`ValueListenable<String>`，可通过 `ValueListenableBuilder` 做响应式 UI（零运行时依赖，不用 signals）。

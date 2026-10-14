@@ -1,0 +1,73 @@
+name: Example Build (manual verification)
+
+# 仅用于「手动」验证 example 应用可完整构建。本插件为纯 Dart、无原生代码，
+# 一次成功的构建即是对「示例代码实际使用的公开 API」的回归验证。
+# 不计入分支保护 required checks。
+# Manual-only verification that the example app builds end-to-end. This plugin is
+# pure Dart with no native code, so a successful build is the regression check for
+# the public API the example exercises. NOT a required status check.
+#
+# 为什么需要它 / Why this exists:
+#   ci.yml 的 path-filter `code` 列表只覆盖 example/lib/**，且只跑 analyze，
+#   不执行构建。本 workflow 补上 `flutter build web`——example 的主目标平台
+#   （宽度预设 chips 依赖浏览器窗口）——确保示例代码始终能编译通过。
+#   ci.yml's `code` path-filter only covers example/lib/** and runs analyze only,
+#   never a build. This workflow adds `flutter build web` — the example's primary
+#   target (the width-preset chips rely on a browser window) — so the demo code
+#   always compiles against the current public API.
+#
+# 用法 / Usage:
+#   在任意分支上 → Actions → 选本 workflow → "Run workflow"（默认用当前分支）。
+#   On any branch → Actions → select this workflow → "Run workflow".
+
+on:
+  # 手动触发 / Manual trigger only
+  workflow_dispatch:
+
+jobs:
+  web-build:
+    name: Build Example for Web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disable autocrlf on runner
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+          git config --global core.safecrlf false
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          # 与 ci.yml 保持一致，避免工具链漂移导致本地/CI 结果不一致
+          # Keep in sync with ci.yml so local vs CI results don't diverge due to toolchain drift
+          flutter-version: '3.41.7'
+          cache: true
+
+      - name: Print Flutter version
+        run: flutter --version
+
+      - name: Install plugin dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Build example for web
+        # example 的主目标平台是 Web：宽度预设 chips 在浏览器里一键切换
+        # Phone 480 / Foldable 720 / Tablet 1023 / Desktop 四档，验证三种行为。
+        # The example targets web first: the width-preset chips switch between
+        # Phone 480 / Foldable 720 / Tablet 1023 / Desktop in the browser to
+        # verify all three behaviors.
+        working-directory: example
+        run: flutter build web
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v7
+        with:
+          name: example-web-build
+          path: example/build/web
