@@ -1,15 +1,15 @@
 name: zero_adaptive_link
 description: 'Adaptive navigation for Flutter — one onTap, the right behavior everywhere: push a page on mobile, expand a sidebar pane on web and desktop. URL-addressable, deep-linkable, zero runtime dependencies.'
-version: 0.1.0
+version: 0.1.1
 topics:
   - navigation
   - router
   - adaptive
   - responsive
   - master-detail
-homepage: https://github.com/zero-labsco/zero_adaptive_link
-repository: https://github.com/zero-labsco/zero_adaptive_link
-documentation: https://zero-labsco.github.io/zero_adaptive_link/
+homepage: https://github.com/zero-labsco/zero-adaptive-link
+repository: https://github.com/zero-labsco/zero-adaptive-link
+documentation: https://zero-labsco.github.io/zero-adaptive-link/
 
 license: MPL-2.0
 

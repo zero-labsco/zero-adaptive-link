@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+### Fixed / 修复
+- Fixed the published package links: `homepage` and `repository` now point at the GitHub repository (`zero-adaptive-link`), and `documentation` points at the GitHub Pages site, so the links shown on pub.dev resolve instead of returning 404.
+  - 修复已发布包的链接：`homepage` 与 `repository` 现在指向 GitHub 仓库（`zero-adaptive-link`），`documentation` 指向 GitHub Pages 站点，pub.dev 上展示的链接可正常访问而不再返回 404。
+- Fixed the documentation site's `basePath` and `assetPrefix` to match the Pages project path, so the site's CSS and JavaScript load instead of 404-ing (which left the pages unstyled).
+  - 修复文档站的 `basePath` 与 `assetPrefix` 以匹配 Pages 项目路径，使站点的 CSS 与 JavaScript 能正常加载而不再 404（此前会导致页面无样式）。
+
 ## 0.1.0
 
 ### Added / 新增
