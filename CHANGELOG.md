@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.0
+
+### Fixed / 修复
+
+- Fixed `ZeroRoute.barrierDismissible` being silently ignored: the value was captured into the route config but never passed to `PageRoute`, whose private final field defaults to `false`. Tapping the barrier of a fullscreen route with `barrierDismissible: true` now dismisses it, as documented.
+  - 修复 `ZeroRoute.barrierDismissible` 被静默忽略：该值被采集进路由配置，却从未传给 `PageRoute`——父类的私有 final 字段默认 `false`。现在点击 `barrierDismissible: true` 的 fullscreen 路由屏障会如文档所述关闭它。
+- Fixed `ZeroRoute.fullscreenDialog` being silently ignored for the same reason: the created route now reports `fullscreenDialog == true`, so the full-screen dialog transition applies and the back-swipe gesture is disabled.
+  - 修复 `ZeroRoute.fullscreenDialog` 因同样原因被静默忽略：创建的 route 现在报告 `fullscreenDialog == true`，全屏对话框转场生效，侧滑返回被禁用。
+- Fixed a leaked `pushNamed` future for fullscreen routes: clearing the overlay stack (a new push, a deep link, or an unmatched location while an overlay was open) dropped the entries without completing their futures, so `await ZeroNav.open(...)` hung forever. Every discarded overlay entry's future is now completed with `null`.
+  - 修复 fullscreen 路由 `pushNamed` Future 泄漏：清空覆盖栈（覆盖层打开时再次 push、收到深链、或 location 失配）会丢弃条目而不补完其 Future，`await ZeroNav.open(...)` 因此永久挂起。现在每个被遗弃的覆盖层条目的 Future 都会以 `null` 补完。
+- Fixed percent-encoded path parameters being rewritten by matching: `Uri.parse` decodes path segments and the matcher re-emitted them raw, so `/products/a%20b` became the location `/products/a b` (desyncing the URL bar, `namedLocation` and push de-duplication). Segments are now re-encoded, and locations round-trip unchanged.
+  - 修复匹配过程改写百分号编码的路径参数：`Uri.parse` 会解码路径片段，而 matcher 原样拼回，导致 `/products/a%20b` 的 location 变成 `/products/a b`（与地址栏、`namedLocation`、push 去重脱节）。现在片段会重新编码，location 往返不变。
+- Fixed bare `StateError: No element` crashes for degenerate configurations: an empty `routes` list threw before the `assert` could run, and an empty `ZeroTab` crashed the first `goTab` / deep-link fallback. All three cases now fail with friendly asserts (`At least one ZeroShell is required`, `Exactly one ZeroShell is supported in 0.x`, `at least one ZeroTab`, `at least one ZeroRoute`).
+  - 修复退化配置下的裸 `StateError: No element` 崩溃：空 `routes` 列表会在 `assert` 执行前就抛错，空 `ZeroTab` 会在首次 `goTab` / 深链回退时崩溃。这三种情况现在都会给出友好断言（`At least one ZeroShell is required`、`Exactly one ZeroShell is supported in 0.x`、`at least one ZeroTab`、`at least one ZeroRoute`）。
+- Fixed the web hash parser merging the host page's query into the location: `/?utm_source=x#/products/42` used to become `/products/42?utm_source=x`. The query inside the fragment (the app's own) is still kept.
+  - 修复 Web hash 解析器把宿主页面的 query 合并进 location：`/?utm_source=x#/products/42` 过去会变成 `/products/42?utm_source=x`。fragment 内部的 query（应用自身的）仍会保留。
+- Fixed the misleading `restoreRouteInformation` doc comment (it claimed to restore a fragment URI; the URI must stay fragment-free so the provider re-adds the `#`).
+  - 修正 `restoreRouteInformation` 误导性的文档注释（它声称还原为 fragment URI；URI 必须不带 fragment，由 provider 重新加上 `#`）。
+
+### Changed / 优化
+
+- The Escape shortcut (`escapePops`, on by default) now wraps the root navigator instead of the shell content, so it also reaches fullscreen overlay pages — which render above the shell route and could never see a `Shortcuts` ancestor inside it.
+  - Escape 快捷键（`escapePops`，默认开启）现在包裹根 navigator 而非 shell 内容，因此也能作用于 fullscreen 覆盖页——它们渲染在 shell route 之上，看不到其内部的 `Shortcuts` 祖先。
+- `ZeroShellState` is now reused across rebuilds when none of its observable fields changed, so an unrelated delegate rebuild no longer notifies every shell-scope dependent.
+  - `ZeroShellState` 现在在可观察字段均未变化时跨重建复用，delegate 的不相关重建不再通知所有 shell scope 依赖者。
+- The resize handle drag no longer misreads a drag started at global x == 0 as "not dragging" (which let a widget update overwrite the fraction mid-drag); a dedicated flag tracks the gesture.
+  - 拖拽分割线不再把在全局 x == 0 处开始的拖拽误判为「未在拖拽」（组件更新会在拖拽中途覆盖比例）；改用专用标志跟踪手势。
+
+### Added / 新增
+
+- Added `SlidingPanes.onLeftPaneFractionDragEnd`: a once-per-drag commit callback, wired by `ZeroRouter` to a single rebuild so `ZeroShellState.leftPaneFraction` catches up after a handle drag (live dragging still streams through `onLeftPaneFractionChanged`).
+  - 新增 `SlidingPanes.onLeftPaneFractionDragEnd`：每轮拖拽触发一次的提交回调，由 `ZeroRouter` 接入一次重建，使 `ZeroShellState.leftPaneFraction` 在拖拽分割线后跟上（实时拖拽仍走 `onLeftPaneFractionChanged` 逐帧回调）。
+
 ## 0.1.3
 
 ### Fixed / 修复

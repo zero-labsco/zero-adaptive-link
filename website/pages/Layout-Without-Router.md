@@ -15,7 +15,8 @@ SlidingPanes(
   resizeHandleWidth: 4,
   resizeHandleBuilder: (context, isHovered) => const SizedBox(width: 4),
   paneBuilder: (context, pane, isLeft) => Card(child: pane),
-  onLeftPaneFractionChanged: (fraction) => …,
+  onLeftPaneFractionChanged: (fraction) => …,        // per drag frame / 逐帧
+  onLeftPaneFractionDragEnd: (fraction) => …,        // once per drag / 每轮拖拽一次
 )
 ```
 
@@ -28,7 +29,10 @@ SlidingPanes(
 - The default `paneBuilder` renders a card when the pane is wide and a flat surface when narrow.
   默认 `paneBuilder`：pane 较宽时呈现为卡片，较窄时保持扁平。
 - Drag the resize handle to change `leftPaneFraction`.
-  拖拽分割线调整 `leftPaneFraction`。
+  `onLeftPaneFractionChanged` streams per frame; `onLeftPaneFractionDragEnd`
+  fires once with the final fraction (the commit point).
+  拖拽分割线调整 `leftPaneFraction`。`onLeftPaneFractionChanged` 逐帧回调；
+  `onLeftPaneFractionDragEnd` 只触发一次并带最终比例（提交点）。
 
 ```dart
 SlidingPanes(

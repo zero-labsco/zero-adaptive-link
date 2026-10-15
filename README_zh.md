@@ -17,7 +17,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 推荐升级：** `0.1.2` 修复了两个 bug——拖拽分割线不再卡顿 / 漂移（改为跟踪指针的真实行程），以及 `dispose` 时移除泄漏的 `paneSideListenable` 监听器。建议所有用户升级到最新版本（`^0.1.2`）。
+> **🔔 推荐升级：** `0.2.0` 让模态路由属性真正生效——`barrierDismissible` 现在会在点击屏障时关闭 fullscreen 路由，`fullscreenDialog` 现在能送达创建的 route（对话框转场、禁用侧滑返回）。同时修复了 fullscreen 页面 `pushNamed` Future 泄漏的问题（覆盖层打开时再进行导航，过去会让它永远挂起），对百分号编码的路径参数重新编码使 location 往返不变，并把空路由表现有的裸 `StateError` 换成友好断言。建议所有用户升级到最新版本（`^0.2.0`）。
 
 🌐 **[官方网站](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[pub.dev 页面](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[GitHub 仓库](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -68,7 +68,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.1.2
+  zero_adaptive_link: ^0.2.0
 ```
 
 ### GitHub
@@ -78,7 +78,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.1.2   # 将 0.1.2 替换为所需版本
+      ref: release/v0.2.0   # 将 0.2.0 替换为所需版本
 ```
 
 ---

@@ -12,6 +12,18 @@ The bottom bar is rendered **inside** the branch pages (via `ZeroShellChrome`), 
 
 底部栏渲染进 branch 页面**内部**（通过 `ZeroShellChrome`），因此插入同一（branch）navigator overlay 的 sheet 位于其上方。系统返回键先关闭 sheet，因为 sheet 在该 route 上注册了局部历史条目。
 
+## Why does pushing another tab's root route stack instead of replacing? / 为什么 push 另一个根路由是叠栈而不是替换？
+
+Inside the same tab, `pushNamed` is a stack push, whatever the target: pushing a sibling root route (e.g. `/cart` while on `/products`) puts it on top of the current stack, and popping returns to `/products`. Only a *different tab* (or an external navigation — deep link, browser back) replaces the stack. The pushed root hides the compact bottom bar like any other pushed page (`hidesBottomBarWhenPushed`); set it to `false` to keep the chrome.
+
+在同一 tab 内，`pushNamed` 无论目标是什么都是栈式 push：push 一个兄弟根路由（如在 `/products` 上 push `/cart`）会叠到当前栈顶，pop 后回到 `/products`。只有**切换到别的 tab**（或外部导航——深链、浏览器返回）才会替换整个栈。被 push 的根路由与其它被 push 页面一样隐藏 compact 底部栏（`hidesBottomBarWhenPushed`）；设为 `false` 可保留 chrome。
+
+## Why is my router-level redirect not re-run? / 为什么路由级重定向没有重新执行？
+
+When the platform reports the location the delegate already holds (the same hash, a re-delivered route), the router treats it as an echo and does nothing — that is what keeps in-app navigation from looping. After an external state change (sign-in, sign-out, a feature flag), call `ZeroNav.of(context).refresh()` (or `ZeroRouterDelegate.refresh()`) to force the redirect to re-run for the current location.
+
+当平台上报 delegate 已持有的 location（相同 hash、重复投递的 route）时，路由器视之为回声而不做任何处理——这正是应用内导航不回环的原因。外部状态变化（登录、登出、功能开关）之后，调用 `ZeroNav.of(context).refresh()`（或 `ZeroRouterDelegate.refresh()`）可强制对当前 location 重跑重定向。
+
 ## Why the hash strategy on the web? / 为什么 Web 用 hash 策略？
 
 `/#/products/42` works on GitHub Pages without a 404 fallback, and refresh, deep links and browser back all share the same location pipeline as in-app navigation. In-app navigation uses `history.pushState` (no `hashchange` echo); browser back / forward is observed via `popstate` / `hashchange`.

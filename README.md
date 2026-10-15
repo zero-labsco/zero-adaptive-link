@@ -17,7 +17,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 Upgrade recommended:** `0.1.2` fixes two bugs — the resize-handle drag no longer stalls or drifts (it now tracks the pointer's true travel), and a leaked `paneSideListenable` listener is removed on dispose. All users are encouraged to upgrade to the latest version (`^0.1.2`).
+> **🔔 Upgrade recommended:** `0.2.0` makes the modal route properties actually work — `barrierDismissible` now dismisses a fullscreen route when you tap its barrier, and `fullscreenDialog` now reaches the created route (dialog transition, no back-swipe). It also fixes a leaked `pushNamed` future for fullscreen pages (a new navigation while an overlay was open used to leave it pending forever), re-encodes percent-encoded path parameters so locations round-trip unchanged, and replaces bare `StateError`s with friendly asserts for empty route tables. All users are encouraged to upgrade to the latest version (`^0.2.0`).
 
 🌐 **[Official Website](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[View on pub.dev](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[View on GitHub](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -70,7 +70,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.1.2
+  zero_adaptive_link: ^0.2.0
 ```
 
 ### GitHub
@@ -80,7 +80,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.1.2   # replace 0.1.2 with the version you need
+      ref: release/v0.2.0   # replace 0.2.0 with the version you need
 ```
 
 ---
