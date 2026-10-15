@@ -249,9 +249,20 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     assert(routes.isNotEmpty, 'At least one ZeroShell is required.');
     // A listenable side flips the expanded layout at runtime (no rebuild).
     // 可监听的 side 在运行时切换展开方向（无需重建路由）。
+    // A listenable side flips the expanded layout at runtime (no rebuild).
+    // 可监听的 side 在运行时切换展开方向（无需重建路由）。
+    //
+    // The constructor also has a `paneSide` parameter, which shadows the
+    // instance setter of the same name — so the closure MUST use `this.paneSide`
+    // to reach the setter. Assigning to the bare `paneSide` would only write to
+    // the parameter and never update `_paneSide` (the bug that made the example
+    // "Expand left / right" toggle do nothing).
+    // 构造函数也有一个同名的 `paneSide` 形参，会遮蔽实例 setter——因此闭包必须
+    // 用 `this.paneSide` 才能命中 setter。若直接写 `paneSide` 只会赋值给形参，
+    // `_paneSide` 永远不更新（这正是示例里 Expand 左右点击没反应的 bug）。
     final listenable = paneSideListenable;
     if (listenable != null) {
-      _paneSideListener = () => paneSide = listenable.value;
+      _paneSideListener = () => this.paneSide = listenable.value;
       listenable.addListener(_paneSideListener!);
     }
     for (var t = 0; t < _shell.tabs.length; t++) {

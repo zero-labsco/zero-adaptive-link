@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+### Fixed / 修复
+- Fixed `paneSideListenable` being a no-op at runtime: the delegate's listener closure assigned the new side to the `paneSide` *constructor parameter* (which shadows the instance setter of the same name) instead of the instance setter, so `_paneSide` never updated and the expanded layout never flipped when the listenable changed. The example's "Expand left / right" toggle now actually mirrors the detail pane. Added regression tests (`test/pane_side_test.dart`, `test/expand_side_test.dart`).
+  - 修复 `paneSideListenable` 运行时无效：delegate 的 listener 闭包把新 side 赋给了同名的 `paneSide` **构造形参**（遮蔽了实例 setter），而不是实例 setter，导致 `_paneSide` 永远不更新、展开布局在 listenable 变化时从不翻转。示例里的「Expand left / right」切换现在能真正镜像 detail pane。新增回归测试（`test/pane_side_test.dart`、`test/expand_side_test.dart`）。
+
 ## 0.1.2
 
 ### Fixed / 修复
