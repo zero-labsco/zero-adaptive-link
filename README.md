@@ -17,7 +17,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 Upgrade recommended:** `0.1.1` corrects the published package links: `homepage`, `repository` and `documentation` now point at the real GitHub repository and Pages site, so the documentation link on pub.dev resolves instead of 404-ing. All users are encouraged to upgrade to the latest version (`^0.1.1`).
+> **🔔 Upgrade recommended:** `0.1.2` fixes two bugs — the resize-handle drag no longer stalls or drifts (it now tracks the pointer's true travel), and a leaked `paneSideListenable` listener is removed on dispose. All users are encouraged to upgrade to the latest version (`^0.1.2`).
 
 🌐 **[Official Website](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[View on pub.dev](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[View on GitHub](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -70,7 +70,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.1.1
+  zero_adaptive_link: ^0.1.2
 ```
 
 ### GitHub
@@ -80,7 +80,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.1.1   # replace 0.1.1 with the version you need
+      ref: release/v0.1.2   # replace 0.1.2 with the version you need
 ```
 
 ---

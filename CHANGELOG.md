@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+### Fixed / 修复
+- Fixed the resize-handle drag stalling / drifting: the gesture now tracks the pointer's true travel (`globalPosition`) instead of its position relative to the handle, which moves with the pane during the drag.
+  - 修复拖拽分割线卡顿 / 漂移：手势改用指针的真实行程（`globalPosition`）而非相对 handle 的局部坐标——后者会在拖拽时随 pane 移动而自我反馈。
+- Fixed a listener leak: the `paneSideListenable` listener registered by `ZeroRouterDelegate` is now removed in `dispose`, so a long-lived listenable no longer holds the delegate after disposal (which could fire `notifyListeners` on a dead object).
+  - 修复监听器泄漏：`ZeroRouterDelegate` 注册的 `paneSideListenable` listener 现在会在 `dispose` 中移除，长生命周期的 listenable 不再在 delegate 销毁后持有它（避免对已销毁对象触发 `notifyListeners`）。
+
 ## 0.1.1
 
 ### Fixed / 修复

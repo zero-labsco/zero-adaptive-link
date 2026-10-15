@@ -251,7 +251,8 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     // 可监听的 side 在运行时切换展开方向（无需重建路由）。
     final listenable = paneSideListenable;
     if (listenable != null) {
-      listenable.addListener(() => this.paneSide = listenable.value);
+      _paneSideListener = () => paneSide = listenable.value;
+      listenable.addListener(_paneSideListener!);
     }
     for (var t = 0; t < _shell.tabs.length; t++) {
       _tabStacks.add(<_StackEntry>[]);
@@ -285,6 +286,10 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   final ZeroBreadcrumbsBuilder? breadcrumbsBuilder;
 
   final ZeroShell _shell;
+
+  /// The [paneSideListenable] listener, kept so it can be removed in [dispose].
+  /// 保存 [paneSideListenable] 的 listener，以便在 [dispose] 中移除。
+  VoidCallback? _paneSideListener;
   final List<List<_StackEntry>> _tabStacks = [];
   final List<_StackEntry> _overlayStack = [];
   final Map<int, GlobalKey<NavigatorState>> _navigatorKeys = {};
@@ -1012,6 +1017,11 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
 
   @override
   void dispose() {
+    final listener = _paneSideListener;
+    if (listener != null) {
+      paneSideListenable?.removeListener(listener);
+      _paneSideListener = null;
+    }
     _locationNotifier.dispose();
     super.dispose();
   }

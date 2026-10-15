@@ -17,7 +17,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 推荐升级：** `0.1.1` 修正了已发布包的链接：`homepage`、`repository` 与 `documentation` 现在指向真实的 GitHub 仓库与 Pages 站点，pub.dev 上的文档链接可正常打开而不再 404。建议所有用户升级到最新版本（`^0.1.1`）。
+> **🔔 推荐升级：** `0.1.2` 修复了两个 bug——拖拽分割线不再卡顿 / 漂移（改为跟踪指针的真实行程），以及 `dispose` 时移除泄漏的 `paneSideListenable` 监听器。建议所有用户升级到最新版本（`^0.1.2`）。
 
 🌐 **[官方网站](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[pub.dev 页面](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[GitHub 仓库](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -68,7 +68,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.1.1
+  zero_adaptive_link: ^0.1.2
 ```
 
 ### GitHub
@@ -78,7 +78,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.1.1   # 将 0.1.1 替换为所需版本
+      ref: release/v0.1.2   # 将 0.1.2 替换为所需版本
 ```
 
 ---

@@ -192,7 +192,12 @@ class _SlidingPanesState extends State<SlidingPanes>
   }
 
   void _onDragStart(DragStartDetails details) {
-    _dragStartX = details.localPosition.dx;
+    // Use the global pointer position: the handle moves with `_fraction`
+    // during the drag, so a local position would feed back on itself and make
+    // the pane lag / drift. The global delta is the true pointer travel.
+    // 使用全局指针坐标：拖拽时 handle 随 `_fraction` 移动，局部坐标会自我反馈
+    // 导致 pane 卡顿 / 漂移。全局位移才是真实指针行程。
+    _dragStartX = details.globalPosition.dx;
     _dragStartFraction = _fraction;
   }
 
@@ -210,7 +215,7 @@ class _SlidingPanesState extends State<SlidingPanes>
     final sign = widget.side == SlidingPanesSide.right ? 1.0 : -1.0;
     final desired =
         _dragStartFraction * usable +
-        sign * (details.localPosition.dx - _dragStartX);
+        sign * (details.globalPosition.dx - _dragStartX);
     final fraction = _masterWidthFor(usable, desired / usable) / usable;
     setState(() {
       _fraction = fraction;

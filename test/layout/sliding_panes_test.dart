@@ -133,6 +133,47 @@ void main() {
       // 设上限后 master 停在 300px，detail 随之左移。
       expect(await detailLeft(300), lessThan(350));
     });
+
+    testWidgets('drag follows the pointer by its true travel', (tester) async {
+      // The handle moves with the pane during the drag, so a local-position
+      // delta would feed back and stall it. Only the global pointer travel
+      // makes the fraction track the drag (regression for the drift bug).
+      // handle 拖拽时随 pane 移动，局部坐标会自我反馈而卡住；只有全局指针位移
+      // 能让比例真正跟随拖拽（漂移 bug 的回归测试）。
+      double? lastFraction;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 800,
+            height: 100,
+            child: SlidingPanes(
+              leftPaneFraction: 0.4,
+              onLeftPaneFractionChanged: (f) => lastFraction = f,
+              children: const [Text('master'), Text('detail')],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final handle = find.byWidgetPredicate(
+        (w) => w is GestureDetector && w.onHorizontalDragStart != null,
+      );
+      final center = tester.getCenter(handle);
+      final gesture = await tester.startGesture(center);
+      await tester.pump();
+      await gesture.moveBy(const Offset(80, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      // Usable width ≈ 800 - 4 (handle) = 796; an 80px drag grows the master
+      // fraction by ~0.10, so 0.4 → ~0.50. A stalled (local-position) pane
+      // would stay near 0.4.
+      // 可用宽 ≈ 800 - 4（分割线）= 796；右拖 80px 应使 master 占比增 ~0.10，
+      // 即 0.4 → ~0.50。卡顿（局部坐标）实现会停在 ~0.4。
+      expect(lastFraction, isNotNull);
+      expect(lastFraction!, greaterThan(0.44));
+      expect(lastFraction!, lessThan(0.6));
+    });
   });
 
   group('Breadcrumbs', () {

@@ -1,6 +1,6 @@
 name: zero_adaptive_link
-description: 'Adaptive navigation for Flutter — one onTap, the right behavior everywhere: push a page on mobile, expand a sidebar pane on web and desktop. URL-addressable, deep-linkable, zero runtime dependencies.'
-version: 0.1.1
+description: 'Adaptive navigation for Flutter: one onTap, the right behavior everywhere.'
+version: 0.1.2
 topics:
   - navigation
   - router
