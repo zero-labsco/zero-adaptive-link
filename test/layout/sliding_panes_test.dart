@@ -134,6 +134,47 @@ void main() {
       expect(await detailLeft(300), lessThan(350));
     });
 
+    testWidgets('onLeftPaneFractionDragEnd fires once per drag', (
+      tester,
+    ) async {
+      final updates = <double>[];
+      double? committed;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 800,
+            height: 100,
+            child: SlidingPanes(
+              leftPaneFraction: 0.4,
+              onLeftPaneFractionChanged: updates.add,
+              onLeftPaneFractionDragEnd: (f) => committed = f,
+              children: const [Text('master'), Text('detail')],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final handle = find.byWidgetPredicate(
+        (w) => w is GestureDetector && w.onHorizontalDragStart != null,
+      );
+      final center = tester.getCenter(handle);
+      final gesture = await tester.startGesture(center);
+      await tester.pump();
+      await gesture.moveBy(const Offset(80, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // Live updates keep streaming, but the commit callback fires exactly
+      // once with the final fraction — so a listener can react per drag
+      // instead of per frame.
+      // 逐帧回调持续触发，但提交回调只触发一次，且带最终比例——监听者因此
+      // 可以每轮拖拽只反应一次，而非每帧一次。
+      expect(updates, isNotEmpty);
+      expect(committed, isNotNull);
+      expect(committed, updates.last);
+    });
+
     testWidgets('drag follows the pointer by its true travel', (tester) async {
       // The handle moves with the pane during the drag, so a local-position
       // delta would feed back and stall it. Only the global pointer travel

@@ -121,7 +121,18 @@ class _ZeroPageRoute<T> extends PageRoute<T>
     required _ZeroPage page,
     required this.builder,
     required this.config,
-  }) : super(settings: page);
+  }) : super(
+         settings: page,
+         // `fullscreenDialog` and `barrierDismissible` MUST reach `PageRoute`
+         // here: both are stored in private final fields there, so a getter
+         // override cannot supply them and the defaults (`false`) would
+         // silently win.
+         // `fullscreenDialog` 与 `barrierDismissible` 必须在此传给
+         // `PageRoute`：二者在父类中是私有 final 字段，getter 覆写无法提供，
+         // 否则默认值 `false` 会静默生效。
+         fullscreenDialog: config.fullscreenDialog,
+         barrierDismissible: config.barrierDismissible,
+       );
 
   final WidgetBuilder builder;
   final _RouteConfig config;
@@ -244,9 +255,26 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     required this.escapePops,
     required this.breadcrumbsBuilder,
   }) : _paneSide = paneSide,
-       _leftPaneFraction = initialLeftPaneFraction,
-       _shell = routes.first {
+       _leftPaneFraction = initialLeftPaneFraction {
     assert(routes.isNotEmpty, 'At least one ZeroShell is required.');
+    assert(
+      routes.length == 1,
+      'Exactly one ZeroShell is supported in 0.x; received ${routes.length}. '
+      'Extra shells are silently ignored otherwise — pass one. '
+      '0.x 仅支持一个 ZeroShell；收到了 ${routes.length} 个。多出的 shell '
+      '会被静默忽略——请只传一个。',
+    );
+    // Assigned here (not in the initializer list) so the asserts above fire
+    // first: `routes.first` in the initializer list threw a bare
+    // `StateError: No element` before the friendly assert could run.
+    // 在此赋值（而非初始化列表），让上面的断言先执行：在初始化列表里写
+    // `routes.first` 会在友好断言之前抛出裸 `StateError: No element`。
+    _shell = routes.first;
+    assert(
+      _shell.tabs.isNotEmpty,
+      'A ZeroShell needs at least one ZeroTab. '
+      'ZeroShell 至少需要一个 ZeroTab。',
+    );
     // A listenable side flips the expanded layout at runtime (no rebuild).
     // 可监听的 side 在运行时切换展开方向（无需重建路由）。
     // A listenable side flips the expanded layout at runtime (no rebuild).
@@ -266,6 +294,19 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       listenable.addListener(_paneSideListener!);
     }
     for (var t = 0; t < _shell.tabs.length; t++) {
+      // An empty tab has no default location to fall back to; without this the
+      // first `goTab` / deep-link fallback threw a bare
+      // `StateError: No element` on `tabs[t].routes.first`.
+      // 空 tab 没有可回退的默认 location；没有该断言，首次 `goTab` /
+      // 深链回退会在 `tabs[t].routes.first` 上抛出裸
+      // `StateError: No element`。
+      assert(
+        _shell.tabs[t].routes.isNotEmpty,
+        'Every ZeroTab needs at least one ZeroRoute — an empty tab has no '
+        'default location to fall back to. '
+        '每个 ZeroTab 至少需要一条 ZeroRoute——空 tab 没有可回退的默认 '
+        'location。',
+      );
       _tabStacks.add(<_StackEntry>[]);
       _registerRouteNames(_shell.tabs[t].routes, '/');
     }
@@ -296,7 +337,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   final bool escapePops;
   final ZeroBreadcrumbsBuilder? breadcrumbsBuilder;
 
-  final ZeroShell _shell;
+  late final ZeroShell _shell;
 
   /// The [paneSideListenable] listener, kept so it can be removed in [dispose].
   /// 保存 [paneSideListenable] 的 listener，以便在 [dispose] 中移除。
@@ -313,7 +354,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   double _leftPaneFraction;
   BreakpointClass _widthClass = BreakpointClass.expanded;
   SlidingPanesSide _paneSide = SlidingPanesSide.right;
-  late ZeroShellState _shellState;
+  ZeroShellState? _shellState;
   final ValueNotifier<String> _locationNotifier = ValueNotifier<String>('/');
 
   /// Which side the detail pane expands toward. Mutating it rebuilds the
@@ -531,13 +572,13 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
         tabIndex,
         MatchList(_underlyingMatches(tabIndex, tabMatches)),
       );
-      _overlayStack.clear();
+      _clearOverlay();
     } else {
       final stack = _tabStacks[tabIndex];
       for (final match in tabMatches) {
         stack.add(_createEntry(match, isRoot: false));
       }
-      _overlayStack.clear();
+      _clearOverlay();
     }
     if (isFullscreen) {
       _overlayStack.add(_createEntry(leaf, isOverlay: true, isRoot: false));
@@ -574,7 +615,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       state: ZeroRouteState(fullPath: location, location: location),
     );
     _setTabStack(_currentTab, MatchList([match]));
-    _overlayStack.clear();
+    _clearOverlay();
     _location = location;
     if (_locationNotifier.value != _location) {
       _locationNotifier.value = _location;
@@ -761,6 +802,24 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     }
     _syncLocation();
     notifyListeners();
+  }
+
+  /// Clear the overlay stack, completing every pending entry's future so a
+  /// `pushNamed` caller is never left waiting on a discarded overlay page.
+  /// 清空覆盖栈，并补完每个待定条目的 Future——`pushNamed` 的调用者永远不会
+  /// 被遗弃的覆盖页永久挂起。
+  ///
+  /// Plain `clear()` leaked the completers: the pages left the navigator (so
+  /// they could never be popped) while their futures stayed pending forever.
+  /// 直接 `clear()` 会泄漏 completer：页面已离开 navigator（再也不会被 pop），
+  /// 其 Future 却永远挂起。
+  void _clearOverlay([Object? result]) {
+    for (final entry in _overlayStack) {
+      if (!entry.completer.isCompleted) {
+        entry.completer.complete(result);
+      }
+    }
+    _overlayStack.clear();
   }
 
   /// Consult the top page's `PopScope`, then the route's `onExit`, then pop.
@@ -1053,7 +1112,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   }
 
   Widget _buildRoot(BuildContext context) {
-    _shellState = ZeroShellState(
+    final next = ZeroShellState(
       currentIndex: _currentTab,
       isCompact: _widthClass == BreakpointClass.compact,
       isMedium: _widthClass == BreakpointClass.medium,
@@ -1061,8 +1120,22 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       goTab: goTab,
       leftPaneFraction: _leftPaneFraction,
     );
-    return ZeroShellScope(
-      state: _shellState,
+    // Reuse the previous instance when nothing observable changed: the shell
+    // scope then notifies no dependents, so an unrelated rebuild of the
+    // delegate does not rebuild the whole shell subtree.
+    // 可观察字段均未变化时复用上一个实例：shell scope 不会通知任何依赖者，
+    // delegate 的不相关重建因此不会带动整棵 shell 子树重建。
+    final previous = _shellState;
+    if (previous == null ||
+        previous.currentIndex != next.currentIndex ||
+        previous.isCompact != next.isCompact ||
+        previous.isMedium != next.isMedium ||
+        previous.isExpanded != next.isExpanded ||
+        previous.leftPaneFraction != next.leftPaneFraction) {
+      _shellState = next;
+    }
+    final navigator = ZeroShellScope(
+      state: _shellState!,
       child: Navigator(
         key: _rootNavigatorKey,
         pages: <Page<Object?>>[
@@ -1072,15 +1145,14 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
         onDidRemovePage: _onDidRemovePage,
       ),
     );
-  }
-
-  /// Builds the shell content (inside the root navigator's shell route).
-  /// 构建 shell 内容（位于根 navigator 的 shell route 之内）。
-  Widget buildShellContent(BuildContext context) {
-    final child = _buildShellChild(context);
-    final content = _shell.builder(context, _shellState, child);
+    // The Escape shortcut wraps the ROOT navigator (not the shell content) so
+    // it also reaches fullscreen overlay pages, which render above the shell
+    // route and could never see a `Shortcuts` ancestor inside it.
+    // Escape 快捷键包裹根 navigator（而非 shell 内容），这样也能作用于
+    // fullscreen 覆盖页——它们渲染在 shell route 之上，看不到其内部的
+    // `Shortcuts` 祖先。
     if (!escapePops) {
-      return content;
+      return navigator;
     }
     return Shortcuts(
       shortcuts: const <ShortcutActivator, Intent>{
@@ -1095,9 +1167,15 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
             },
           ),
         },
-        child: content,
+        child: navigator,
       ),
     );
+  }
+
+  /// Builds the shell content (inside the root navigator's shell route).
+  /// 构建 shell 内容（位于根 navigator 的 shell route 之内）。
+  Widget buildShellContent(BuildContext context) {
+    return _shell.builder(context, _shellState!, _buildShellChild(context));
   }
 
   Widget _buildShellChild(BuildContext context) {
@@ -1136,6 +1214,16 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       paneBuilder: paneBuilder,
       onLeftPaneFractionChanged: (fraction) {
         _leftPaneFraction = fraction;
+      },
+      onLeftPaneFractionDragEnd: (fraction) {
+        // Commit point of a handle drag: rebuild once so
+        // `ZeroShellState.leftPaneFraction` catches up. Notifying per frame
+        // instead would rebuild the whole shell on every drag update.
+        // 拖拽分割线的提交点：只重建一次，使
+        // `ZeroShellState.leftPaneFraction` 跟上。若逐帧通知，整个 shell
+        // 会在每次拖拽更新时重建。
+        _leftPaneFraction = fraction;
+        notifyListeners();
       },
       children: panes,
     );

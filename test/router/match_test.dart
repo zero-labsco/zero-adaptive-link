@@ -86,6 +86,30 @@ void main() {
       expect(ZeroRouteMatcher.match(root, ''), isNotNull);
     });
 
+    test('percent-encoded segments round-trip unchanged', () {
+      // Regression: `Uri.parse` decodes path segments, and re-emitting them
+      // raw rewrote the location (`/products/a%20b` → `/products/a b`),
+      // desyncing it from `namedLocation` (which encodes) and from the URL.
+      // 回归：`Uri.parse` 会解码路径片段，原样拼回会改写 location
+      // （`/products/a%20b` → `/products/a b`），与 `namedLocation`（会编码）
+      // 和 URL 脱节。
+      final matched = ZeroRouteMatcher.match(routes, '/products/a%20b')!;
+      expect(matched.last!.location, '/products/a%20b');
+      expect(matched.last!.state.pathParameters['id'], 'a b');
+
+      // An encoded slash stays inside one segment and stays encoded.
+      // 编码的斜杠仍属于单个片段，且保持编码。
+      final slashed = ZeroRouteMatcher.match(routes, '/products/a%2Fb')!;
+      expect(slashed.last!.location, '/products/a%2Fb');
+      expect(slashed.last!.state.pathParameters['id'], 'a/b');
+
+      // Non-ASCII parameters survive the round-trip too.
+      // 非 ASCII 参数同样可以往返。
+      final unicode = ZeroRouteMatcher.match(routes, '/products/%E4%B8%AD')!;
+      expect(unicode.last!.location, '/products/%E4%B8%AD');
+      expect(unicode.last!.state.pathParameters['id'], '中');
+    });
+
     test('joinPattern joins relative child paths', () {
       expect(ZeroRouteMatcher.joinPattern('/', 'products'), '/products');
       expect(ZeroRouteMatcher.joinPattern('/products', ':id'), '/products/:id');

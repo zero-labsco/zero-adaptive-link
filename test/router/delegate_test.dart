@@ -146,7 +146,16 @@ void main() {
       final router = ZeroRouter(
         initialLocation: '/a',
         redirectLimit: 3,
-        redirect: (location) => '/b',
+        // A genuinely bouncing redirect (/a → /b → /a → …) so the hop budget
+        // is exhausted. The previous version returned '/b' unconditionally,
+        // which resolves on the first hop and never exercised the limit — and
+        // because `setNewRoutePath` with the location the delegate already
+        // holds is an intentional echo no-op, the assertion passed vacuously.
+        // 真正乒乓的重定向（/a → /b → /a → …），跳数预算必被耗尽。旧版无条件
+        // 返回 '/b'，第一跳就解析成功，永远测不到限流；且 `setNewRoutePath`
+        // 传入 delegate 已持有的 location 是刻意为之的回声 no-op，
+        // 旧断言是空转通过的。
+        redirect: (location) => location == '/a' ? '/b' : '/a',
         routes: [
           ZeroShell(
             builder: (context, shell, child) => child,
@@ -162,10 +171,56 @@ void main() {
         ],
       );
       final delegate = router.routerDelegate as ZeroRouterDelegate;
-      await delegate.setNewRoutePath('/a');
+      // `setInitialRoutePath` forces resolution; `setNewRoutePath` skips a
+      // location the delegate already holds (the echo check), which is what
+      // made the old assertion vacuous.
+      // `setInitialRoutePath` 强制执行解析；`setNewRoutePath` 会跳过 delegate
+      // 已持有的 location（回声检查）——这正是旧断言空转的原因。
+      await delegate.setInitialRoutePath('/a');
       // The requested location is preserved; the stack holds the error page.
       expect(delegate.currentConfiguration, '/a');
+      // A single-entry stack: the error page replaced whatever was there.
+      // 单条目栈：错误页替换掉了原先的内容。
+      expect(delegate.canPop, isFalse);
     });
+
+    test(
+      'refresh re-runs the router redirect for the current location',
+      () async {
+        var gateOpen = true;
+        final router = ZeroRouter(
+          initialLocation: '/public',
+          // A gate that can close while the user sits on `/public`.
+          // 一扇可能在用户停留在 `/public` 时关闭的门。
+          redirect: (location) => gateOpen ? null : '/login',
+          routes: [
+            ZeroShell(
+              builder: (context, shell, child) => child,
+              tabs: const [
+                ZeroTab(
+                  routes: [
+                    ZeroRoute(path: '/public', builder: _page),
+                    ZeroRoute(path: '/login', builder: _page),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        );
+        final delegate = router.routerDelegate as ZeroRouterDelegate;
+        await delegate.setNewRoutePath('/public');
+        expect(delegate.currentConfiguration, '/public');
+
+        // `refresh` forces the resolution the echo check would otherwise skip
+        // for a same-location report, so an external state change is picked up
+        // without navigating.
+        // `refresh` 强制执行解析——回声检查本会跳过同一 location 的上报——
+        // 从而在无导航的情况下拾取外部状态变化。
+        gateOpen = false;
+        await delegate.refresh();
+        expect(delegate.currentConfiguration, '/login');
+      },
+    );
 
     test('namedLocation builds parameterized locations', () async {
       final router = ZeroRouter(

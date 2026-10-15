@@ -121,6 +121,14 @@ class ZeroRoute {
 /// One branch (tab) of the shell. / shell 的一个 branch（tab）。
 class ZeroTab {
   /// Create a tab with its route table. / 以路由表创建 tab。
+  ///
+  /// [routes] must be non-empty: an empty tab has no default location to fall
+  /// back to. The check lives in [ZeroRouterDelegate] because a `const`
+  /// constructor's initializer list cannot call `routes.isNotEmpty` (instance
+  /// getters are not constant expressions).
+  /// [routes] 不能为空：空 tab 没有可回退的默认 location。该校验放在
+  /// [ZeroRouterDelegate]，因为 `const` 构造函数的初始化列表无法调用
+  /// `routes.isNotEmpty`（实例 getter 不是常量表达式）。
   const ZeroTab({required this.routes, this.initialLocation, this.placeholder});
 
   /// The route table of this tab. / 该 tab 的路由表。
@@ -139,6 +147,11 @@ class ZeroTab {
 /// 唯一的顶层 shell。v0.1.0 仅支持一个 shell。
 class ZeroShell {
   /// Create the shell. / 创建 shell。
+  ///
+  /// [tabs] must be non-empty; the check runs in [ZeroRouterDelegate] (a
+  /// `const` initializer list cannot evaluate `tabs.isNotEmpty`).
+  /// [tabs] 不能为空；该校验在 [ZeroRouterDelegate] 中执行（`const` 初始化
+  /// 列表无法求值 `tabs.isNotEmpty`）。
   const ZeroShell({
     required this.builder,
     required this.tabs,

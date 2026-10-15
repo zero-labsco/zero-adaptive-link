@@ -68,6 +68,7 @@ class SlidingPanes extends StatefulWidget {
     this.resizeHandleBuilder,
     this.paneBuilder,
     this.onLeftPaneFractionChanged,
+    this.onLeftPaneFractionDragEnd,
     super.key,
   });
 
@@ -117,6 +118,15 @@ class SlidingPanes extends StatefulWidget {
   /// 拖拽分割线时持续回调。
   final ValueChanged<double>? onLeftPaneFractionChanged;
 
+  /// Called once when the user releases the resize handle. Live dragging only
+  /// needs the per-frame [onLeftPaneFractionChanged]; this callback is the
+  /// commit point, so a listener can react once per drag instead of per frame
+  /// (e.g. republishing the fraction to the rest of the app).
+  /// 用户松开分割线时回调一次。实时拖拽只需要逐帧的
+  /// [onLeftPaneFractionChanged]；本回调是「提交点」，监听者可每轮拖拽只
+  /// 反应一次（例如把比例发布给应用其余部分），而非每帧一次。
+  final ValueChanged<double>? onLeftPaneFractionDragEnd;
+
   @override
   State<SlidingPanes> createState() => _SlidingPanesState();
 }
@@ -133,6 +143,7 @@ class _SlidingPanesState extends State<SlidingPanes>
   double _totalWidth = 0;
   double _dragStartFraction = 0.4;
   double _dragStartX = 0;
+  bool _dragActive = false;
   bool _hoveringHandle = false;
   List<Widget> _exitingChildren = const [];
 
@@ -173,7 +184,13 @@ class _SlidingPanesState extends State<SlidingPanes>
     }
   }
 
-  bool get _dragging => _dragStartX != 0;
+  // A separate flag instead of `_dragStartX != 0`: starting a drag at global
+  // x == 0 (possible when the master pane sits on the left edge) would
+  // otherwise read as "not dragging" and let a widget update overwrite the
+  // fraction mid-drag.
+  // 用独立标志而非 `_dragStartX != 0`：在全局 x == 0 处开始拖拽（master 贴在
+  // 左边缘时可能出现）会被误判为「未在拖拽」，组件更新会在拖拽中途覆盖比例。
+  bool get _dragging => _dragActive;
 
   /// Resolves the master pane width, applying both the fraction clamp and the
   /// optional pixel ceiling — the single source of truth shared by the layout
@@ -199,6 +216,7 @@ class _SlidingPanesState extends State<SlidingPanes>
     // 导致 pane 卡顿 / 漂移。全局位移才是真实指针行程。
     _dragStartX = details.globalPosition.dx;
     _dragStartFraction = _fraction;
+    _dragActive = true;
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
@@ -226,7 +244,9 @@ class _SlidingPanesState extends State<SlidingPanes>
   void _onDragEnd(DragEndDetails details) {
     setState(() {
       _dragStartX = 0;
+      _dragActive = false;
     });
+    widget.onLeftPaneFractionDragEnd?.call(_fraction);
   }
 
   Widget _wrapPane(BuildContext context, Widget pane, bool isLeft) {

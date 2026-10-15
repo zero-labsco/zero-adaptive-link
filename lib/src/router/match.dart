@@ -174,7 +174,14 @@ class ZeroRouteMatcher {
   static String _joinActual(String prefix, List<String> segments, int count) {
     var result = prefix;
     for (var i = 0; i < count; i++) {
-      result = result == '/' ? '/${segments[i]}' : '$result/${segments[i]}';
+      // Re-encode: `Uri.parse` decoded the segments, and emitting them raw
+      // would rewrite the location (`/products/a%20b` → `/products/a b`) and
+      // desync it from `namedLocation` (which encodes) and from the URL bar.
+      // 重新编码：`Uri.parse` 会解码片段，原样拼回会改写 location
+      // （`/products/a%20b` → `/products/a b`），与 `namedLocation`（会编码）
+      // 和地址栏脱节。
+      final segment = Uri.encodeComponent(segments[i]);
+      result = result == '/' ? '/$segment' : '$result/$segment';
     }
     return result;
   }

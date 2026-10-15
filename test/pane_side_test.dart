@@ -38,13 +38,19 @@ void main() {
 
     final sliding = find.byType(SlidingPanes);
     expect(sliding, findsOneWidget);
-    expect(tester.widget<SlidingPanes>(sliding).side, SlidingPanesSide.right,
-        reason: 'starts on the right');
+    expect(
+      tester.widget<SlidingPanes>(sliding).side,
+      SlidingPanesSide.right,
+      reason: 'starts on the right',
+    );
 
     side.value = SlidingPanesSide.left;
     await tester.pumpAndSettle();
 
-    expect(tester.widget<SlidingPanes>(sliding).side, SlidingPanesSide.left,
-        reason: 'listener should flip the layout to the left');
+    expect(
+      tester.widget<SlidingPanes>(sliding).side,
+      SlidingPanesSide.left,
+      reason: 'listener should flip the layout to the left',
+    );
   });
 }
