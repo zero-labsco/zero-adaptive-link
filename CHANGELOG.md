@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.3.0
+
+### Fixed / 修复
+
+- Fixed system back (and the Escape shortcut, `maybePop`, `popRoute`) popping the page beneath an open dialog or bottom sheet: framework routes live on the root navigator above the shell route, and the delegate used to consult the branch navigator first, which cannot see them — the dialog stayed floating while the page left. The root navigator is now consulted first, without consulting route hooks, so the dialog dismisses and the page survives.
+  - 修复对话框或 bottom sheet 打开时，系统返回（以及 Escape 快捷键、`maybePop`、`popRoute`）会 pop 掉其下方页面的问题：框架级路由位于 root navigator、处于 shell route 之上，而 delegate 过去先询问看不到它们的 branch navigator——结果是对话框悬浮原地而页面已被 pop。现在优先询问 root navigator 且不询问路由钩子，对话框正常关闭、页面保留。
+- Fixed `ZeroNav.popFrom(context)` (and `popFrom` paths through the root navigator) popping the page beneath instead of dismissing the dialog it was called from: the branch conflated "the root navigator" with "our overlay stack". The navigator's own topmost route (framework route or overlay page) is now popped first, and the declarative tab pop applies only when the root navigator has nothing to pop.
+  - 修复 `ZeroNav.popFrom(context)`（及经由 root navigator 的 `popFrom` 路径）pop 掉下方页面而非关闭所在对话框的问题：该分支把「root navigator」等同于「我们的 overlay 栈」。现在优先 pop navigator 自己的栈顶路由（框架级路由或 overlay 页），只有当 root navigator 无可 pop 内容时才走声明式 tab pop。
+- Fixed an async navigation race: two navigations fired in quick succession used to apply their resolutions in completion order, so a slower (async-redirect) resolution could land last and win — leaving the UI on a stale location. Every navigation now carries a generation stamp and a superseded resolution is dropped, so the last requested location always wins.
+  - 修复异步导航竞态：短时间内发出的两次导航过去按解析完成顺序应用，慢（异步重定向）的解析可能最后落地并胜出——让界面停留在过期的 location 上。现在每次导航都带序号戳，被取代的解析会被丢弃，最后请求的 location 始终获胜。
+- Fixed `pushReplacementNamed` stacking on top of a branch root instead of replacing it (the `length > 1` guard skipped the removal when the stack held only the root). At a single-entry stack the root entry itself is now replaced, matching `Navigator` semantics and external (deep-link) navigation.
+  - 修复 `pushReplacementNamed` 在 branch 根节点上压栈而非替换的问题（`length > 1` 守卫在栈中只有根条目时跳过了移除）。单条目栈现在替换根本身，与 `Navigator` 语义及外部（深链）导航一致。
+- Fixed the first pane expansion having no slide animation: the reveal controller starts at `1`, so a bare `forward()` on the 1 → 2 transition was a no-op and the detail pane appeared instantly. It now starts hidden and slides in.
+  - 修复首次 pane 展开没有滑入动画的问题：reveal controller 初始为 `1`，1 → 2 转换时直接 `forward()` 是空操作，detail pane 瞬间出现。现在从隐藏状态开始滑入。
+
+### Changed / 优化
+
+- Page content is now keyed with a stable per-page `GlobalKey` (`ZeroRouteState.pageKey`), so when the window width crosses a breakpoint the same subtree is handed over in the same frame: compact / medium pages and expanded panes swap structures without recreating the content, and scroll offsets, text input and other element state survive. The key is public so applications can key their own content the same way.
+  - 页面内容现在以稳定的每页面 `GlobalKey`（`ZeroRouteState.pageKey`）标记，窗口宽度跨越断点时于同帧交接同一子树：compact / medium 页面与 expanded pane 互换结构而不重建内容，滚动偏移、文本输入等元素状态得以保留。该键公开，应用可用同样的方式为自己的内容加键。
+- `SlidingPanes` now plays a one-column viewport shift when the master pane is replaced: a deeper push slides the viewport left (the replaced master exits on its side, the new pair slides in from the detail side, widths morphing so both ends line up), and a pop slides it back. The empty-detail hint moved from a second child to a dedicated `placeholder` parameter, so the 1 ↔ 2 child count again drives the expand / collapse transition (the router's placeholder used to mask it, which suppressed the slide entirely). Replacing only the detail still updates in place.
+  - `SlidingPanes` 现在在 master pane 被替换时播放一列视口平移：更深层级 push 使视口左移（被替换的 master 向自己一侧退出，新的一对从 detail 一侧滑入，宽度渐变使两端精确衔接），pop 则反向移回。空详情提示从第二个 child 改为独立的 `placeholder` 参数，1 ↔ 2 的子项计数重新驱动展开 / 收起转场（此前的占位 child 会掩盖它，导致滑动完全失效）。仅替换 detail 仍原地更新。
+- `ZeroRouteState` is no longer `const`-constructible: it now carries the stable `pageKey`, which cannot be a constant expression. Constructing a state by hand (rare — it is normally produced by matching) still works, just without `const`.
+  - `ZeroRouteState` 不再支持 `const` 构造：它现在携带稳定的 `pageKey`，后者不是常量表达式。手动构造状态（罕见——通常由匹配产生）仍然可行，只是不能加 `const`。
+- Added `ZeroNav.goTab(index, {initialLocation})` for imperative tab switching, mirroring `ZeroShellState.goTab`.
+  - 新增 `ZeroNav.goTab(index, {initialLocation})` 用于命令式切换 tab，与 `ZeroShellState.goTab` 等价。
+- Duplicate route names now fail with a friendly assert (`Duplicate route name ...`) instead of the last registration silently winning; the same name mapped to the same path stays allowed.
+  - 重名路由现在以友好断言（`Duplicate route name ...`）失败，而非后注册者静默生效；同名且同路径的重复注册仍然允许。
+- Removed a duplicated comment block in the `ZeroRouterDelegate` constructor and documented two caveats: keep placeholders free of a `Key` (the second pane's key drives the expand / collapse transition), and dialogs / menus opened inside a pane are clipped to the pane unless they use the root navigator (`useRootNavigator: ZeroPaneScope.maybeOf(context) != null`).
+  - 移除了 `ZeroRouterDelegate` 构造函数中重复粘贴的注释块，并补充两处注意事项：占位内容不要设置 `Key`（第二个 pane 的键驱动展开 / 收起转场）；从 pane 内部打开的对话框 / 菜单会被裁剪到 pane 内，除非使用 root navigator（`useRootNavigator: ZeroPaneScope.maybeOf(context) != null`）。
+
+### Added / 新增
+
+- Added `ZeroRouteState.pageKey`: a stable `GlobalKey` for the page's content, used by the plugin for the breakpoint handoff and readable by applications for their own keyed subtrees.
+  - 新增 `ZeroRouteState.pageKey`：页面内容的稳定 `GlobalKey`，插件以其完成断点交接，应用也可读取它为自己的子树加键。
+- Added pane transition coverage to the test suite: expand / deeper-push / pop / collapse transitions, dialog-vs-back regressions (system back, Escape, `maybePop`, `popFrom`, `maybePopFrom`, a dialog over a fullscreen overlay), the async race, the root replacement, the breakpoint-crossing state handoff (both directions), `pageKey` stability and `ZeroNav.goTab`.
+  - 为测试套件补充了 pane 转场覆盖：展开 / 深层 push / pop / 收起转场、dialog 与返回的交互回归（系统返回、Escape、`maybePop`、`popFrom`、`maybePopFrom`、fullscreen 覆盖层上的对话框）、异步竞态、根节点替换、跨断点状态交接（双向）、`pageKey` 稳定性与 `ZeroNav.goTab`。
+
 ## 0.2.0
 
 ### Fixed / 修复

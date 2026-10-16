@@ -17,7 +17,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 推荐升级：** `0.2.0` 让模态路由属性真正生效——`barrierDismissible` 现在会在点击屏障时关闭 fullscreen 路由，`fullscreenDialog` 现在能送达创建的 route（对话框转场、禁用侧滑返回）。同时修复了 fullscreen 页面 `pushNamed` Future 泄漏的问题（覆盖层打开时再进行导航，过去会让它永远挂起），对百分号编码的路径参数重新编码使 location 往返不变，并把空路由表现有的裸 `StateError` 换成友好断言。建议所有用户升级到最新版本（`^0.2.0`）。
+> **🔔 推荐升级：** `0.3.0` 让页面状态在跨越断点时得以保留——页面与 expanded pane 现在于同帧交接同一子树，滚动偏移与文本输入在窗口缩放后依然保留。detail pane 首次展开时会滑入，更深层级 push 时视口整体左移一列，系统返回 / Escape / `popFrom` 现在会优先关闭打开的对话框而不是 pop 其下方的页面。同时修复了异步导航竞态（最后请求的 location 现在始终获胜）、`pushReplacementNamed` 现在会替换 branch 根而非压栈，并新增 `ZeroNav.goTab` 与 `ZeroRouteState.pageKey`。建议所有用户升级到最新版本（`^0.3.0`）。
 
 🌐 **[官方网站](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[pub.dev 页面](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[GitHub 仓库](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -44,6 +44,8 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 - **一套 `onTap`，适配所有宽度** —— 用 `ZeroLink` 包裹任意可点击组件（或用 `ZeroNav` 命令式调用）；插件按**窗口宽度**而非设备类型决策，折叠屏、桌面小窗、浏览器缩放都能正确行为。
 - **断点按窗口宽度** —— `< 600` compact 推页面，`600 – 839` medium 推页面（单列），`>= 840` expanded 展开或更新右侧侧栏 pane。
 - **master-detail pane 语义** —— detail pane 从 `paneSide` 指定的一侧滑入（默认向右、master 在左；设为向左则镜像：master 在右、detail 从左滑入）；分割线可拖拽调整两列比例；三列及以上刻意不做。
+- **pane 转场动画** —— detail pane 首次展开时滑入；更深层级 push 时视口整体左移一列（被替换的 master 退出、新的一对滑入）；pop 时反向移回。
+- **宽度变化状态不丢** —— 窗口跨越断点时，页面与 expanded pane 于同帧交接同一子树，滚动偏移与文本输入不会重置；稳定键以 `ZeroRouteState.pageKey` 暴露。
 - **向左或向右展开** —— 通过 `paneSide` 选择 `SlidingPanesSide.right`（master 在左）或 `SlidingPanesSide.left`（master 在右）；用 `paneSideListenable` 可在运行时切换展开方向而无需重建路由。
 - **带上限的 pane 尺寸** —— 用 `leftPaneFraction` 设置初始分栏比例，用 `maxLeftPaneWidth` 让 master pane 仍随窗口缩放但在超宽屏停在合理宽度（剩余空间由 detail 吸收，拖拽同样受上限约束）。
 - **幂等聚焦** —— 点击已可见的 pane 时聚焦它，而不是堆叠重复 pane。
@@ -68,7 +70,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.2.0
+  zero_adaptive_link: ^0.3.0
 ```
 
 ### GitHub
@@ -78,7 +80,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.2.0   # 将 0.2.0 替换为所需版本
+      ref: release/v0.3.0   # 将 0.3.0 替换为所需版本
 ```
 
 ---

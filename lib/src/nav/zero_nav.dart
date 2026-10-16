@@ -67,6 +67,14 @@ class ZeroNav {
   /// The active tab index. / 当前 tab 下标。
   int get currentTabIndex => _delegate.currentTabIndex;
 
+  /// Switch tabs, optionally resetting the target tab to [initialLocation].
+  /// 切换 tab，可用 [initialLocation] 重置目标 tab。
+  ///
+  /// Mirrors `ZeroShellState.goTab` for imperative callers.
+  /// 与 `ZeroShellState.goTab` 等价，供命令式调用方使用。
+  void goTab(int index, {String? initialLocation}) =>
+      _delegate.goTab(index, initialLocation: initialLocation);
+
   /// Whether a pop would remove something. / pop 是否会移除某些内容。
   bool get canPop => _delegate.canPop;
 

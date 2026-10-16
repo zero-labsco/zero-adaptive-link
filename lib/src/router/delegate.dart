@@ -69,6 +69,56 @@ class _EscapeIntent extends Intent {
   const _EscapeIntent();
 }
 
+/// Counts the framework routes (dialogs, bottom sheets, imperative pushes)
+/// living on the root navigator. Those routes sit **above** the shell route
+/// (and above any fullscreen overlay page), so a back request must pop them
+/// before any of our own pages — the branch navigator below the shell cannot
+/// see them, and consulting it first would pop the page beneath the dialog.
+/// 统计挂在 root navigator 上的框架级路由（dialog、bottom sheet、命令式 push）。
+/// 这些路由位于 shell route（及 fullscreen 覆盖页）**之上**，因此返回请求必须
+/// 先于我们自己的页面 pop 它们——shell 之下的 branch navigator 看不到它们，
+/// 先询问它会把对话框下方的页面 pop 掉。
+class _ImperativeRouteCounter extends NavigatorObserver {
+  /// How many framework routes are currently on the observed navigator.
+  /// 当前被观察 navigator 上的框架级路由数量。
+  int count = 0;
+
+  /// Whether a framework route is the topmost route.
+  /// 框架级路由是否为栈顶路由。
+  bool get hasImperativeRoute => count > 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route.settings is! Page<Object?>) {
+      count++;
+    }
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route.settings is! Page<Object?>) {
+      count--;
+    }
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route.settings is! Page<Object?>) {
+      count--;
+    }
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (newRoute?.settings is! Page<Object?>) {
+      count++;
+    }
+    if (oldRoute?.settings is! Page<Object?>) {
+      count--;
+    }
+  }
+}
+
 /// A [Page] rendering one matched route.
 /// 渲染一个已匹配路由的 [Page]。
 class _ZeroPage extends Page<Object?> {
@@ -277,8 +327,6 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     );
     // A listenable side flips the expanded layout at runtime (no rebuild).
     // 可监听的 side 在运行时切换展开方向（无需重建路由）。
-    // A listenable side flips the expanded layout at runtime (no rebuild).
-    // 可监听的 side 在运行时切换展开方向（无需重建路由）。
     //
     // The constructor also has a `paneSide` parameter, which shadows the
     // instance setter of the same name — so the closure MUST use `this.paneSide`
@@ -347,6 +395,22 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   final Map<int, GlobalKey<NavigatorState>> _navigatorKeys = {};
   final GlobalKey<NavigatorState> _rootNavigatorKey =
       GlobalKey<NavigatorState>();
+
+  /// Watches the root navigator for framework routes (dialogs / sheets).
+  /// 观察 root navigator 上的框架级路由（dialog / sheet）。
+  final _ImperativeRouteCounter _rootRouteCounter = _ImperativeRouteCounter();
+  late final List<NavigatorObserver> _rootObservers = <NavigatorObserver>[
+    _rootRouteCounter,
+  ];
+
+  /// Monotonic navigation sequence: every navigation bumps it before its
+  /// asynchronous resolution and drops the result if a newer navigation has
+  /// started meanwhile — otherwise a slow (async-redirect) resolution could
+  /// land after a newer one and win, leaving the UI on a stale location.
+  /// 单调递增的导航序号：每次导航在异步解析前递增它，若期间有更新的导航
+  /// 开始则丢弃旧结果——否则慢（异步重定向）的解析可能后落地并胜出，
+  /// 让界面停留在过期的 location 上。
+  int _navigationGeneration = 0;
   final Map<String, String> _namedRoutes = {};
 
   int _currentTab = 0;
@@ -394,6 +458,14 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       final fullPath = ZeroRouteMatcher.joinPattern(prefix, route.path);
       final name = route.name;
       if (name != null) {
+        assert(
+          !_namedRoutes.containsKey(name) || _namedRoutes[name] == fullPath,
+          'Duplicate route name "$name": registered for both '
+          '${_namedRoutes[name]} and $fullPath. Route names must be unique '
+          'across the whole table — the last registration silently wins '
+          'otherwise. 重名路由 "$name"：同时注册到 ${_namedRoutes[name]} 与 '
+          '$fullPath。路由名必须在整个路由表内唯一，否则后注册者静默生效。',
+        );
         _namedRoutes[name] = fullPath;
       }
       _registerRouteNames(route.routes, fullPath);
@@ -445,7 +517,16 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     if (!force && external && normalized == _location) {
       return; // Echo of a location we just published ourselves.
     }
+    final generation = ++_navigationGeneration;
     final resolution = await _resolve(normalized, preferredTab: forceTab);
+    if (generation != _navigationGeneration) {
+      // A newer navigation started while this one was resolving (an async
+      // redirect can take a while): drop the stale result so the last
+      // requested location always wins.
+      // 解析期间有更新的导航开始（异步重定向可能耗时）：丢弃过期结果，
+      // 保证最后请求的 location 始终获胜。
+      return;
+    }
     if (resolution == null) {
       _applyError(normalized);
       return;
@@ -709,9 +790,19 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
 
   /// Push a location; returns a future completed by `pop(result)`.
   /// push 一个 location；返回由 `pop(result)` 完成的 Future。
+  ///
+  /// Returns `null` when a newer navigation superseded this one before it
+  /// finished resolving.
+  /// 若更新的导航在其解析完成前开始，则返回 `null`。
   Future<Object?> pushNamed(String location, {Object? arguments}) async {
     final normalized = location.isEmpty ? '/' : location;
+    final generation = ++_navigationGeneration;
     final resolution = await _resolve(normalized, arguments: arguments);
+    if (generation != _navigationGeneration) {
+      // Superseded by a newer navigation; drop the stale result.
+      // 被更新的导航取代；丢弃过期结果。
+      return null;
+    }
     if (resolution == null) {
       _applyError(normalized);
       return null;
@@ -733,18 +824,52 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   }
 
   /// Replace the top entry with a location. / 用 location 替换栈顶条目。
+  ///
+  /// At a branch root (a single-entry stack) the root itself is replaced —
+  /// Navigator semantics — instead of stacking the new route on top of it.
+  /// 位于 branch 根节点（单条目栈）时替换根本身——与 Navigator 语义一致——
+  /// 而不是把新路由压栈。
   Future<Object?> pushReplacementNamed(
     String location, {
     Object? result,
     Object? arguments,
   }) async {
-    if (_overlayStack.isEmpty && _tabStacks[_currentTab].length > 1) {
-      final removed = _tabStacks[_currentTab].removeLast();
+    final normalized = location.isEmpty ? '/' : location;
+    if (_overlayStack.isNotEmpty) {
+      // A fullscreen overlay is showing: the replacement discards it (its
+      // future is settled by the push that follows), which `pushNamed`
+      // already handles. / fullscreen 覆盖层展示中：替换会丢弃它（其 Future
+      // 由随后的 push 补完），`pushNamed` 已覆盖该路径。
+      return pushNamed(normalized, arguments: arguments);
+    }
+    final stack = _tabStacks[_currentTab];
+    if (stack.length > 1) {
+      final removed = stack.removeLast();
       if (!removed.completer.isCompleted) {
         removed.completer.complete(result);
       }
+      return pushNamed(normalized, arguments: arguments);
     }
-    return pushNamed(location, arguments: arguments);
+    // At the branch root there is nothing above to remove, so replace the
+    // root entry itself. / 位于 branch 根节点，上方没有可移除的条目，
+    // 因此替换根本身。
+    final generation = ++_navigationGeneration;
+    final resolution = await _resolve(normalized, arguments: arguments);
+    if (generation != _navigationGeneration) {
+      return null;
+    }
+    if (resolution == null) {
+      _applyError(normalized);
+      return null;
+    }
+    if (resolution.tabIndex == _currentTab) {
+      _applyStacks(_currentTab, resolution.matchList, replace: true);
+      _syncLocation();
+      notifyListeners();
+    } else {
+      _applyExternal(resolution);
+    }
+    return _futureFor(resolution.matchList.location);
   }
 
   /// Push a location after removing entries until [predicate] holds.
@@ -825,9 +950,18 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   /// Consult the top page's `PopScope`, then the route's `onExit`, then pop.
   /// 先问顶层页面 `PopScope`，再问路由 `onExit`，最后 pop。
   ///
+  /// A framework route (dialog / sheet) on the root navigator is popped first,
+  /// without consulting any route hook — it encloses every page.
+  /// root navigator 上的框架级路由（dialog / sheet）优先 pop，且不询问任何
+  /// 路由钩子——它包裹着所有页面。
+  ///
   /// A no-op at the bottom of the stack.
   /// 栈底为 no-op。
   Future<bool> maybePop([Object? result]) async {
+    final rootNav = _rootNavigatorKey.currentState;
+    if (rootNav != null && _rootRouteCounter.hasImperativeRoute) {
+      return rootNav.maybePop(result);
+    }
     if (_overlayStack.isNotEmpty) {
       if (!await _checkOnExit(_overlayStack.last.match.route.onExit)) {
         return true;
@@ -879,7 +1013,16 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       return;
     }
     if (nav == _rootNavigatorKey.currentState) {
-      if (_overlayStack.isNotEmpty) {
+      // The root navigator hosts the shell route, our overlay pages AND
+      // framework routes (dialogs / sheets). Let it pop its own topmost
+      // route first (a framework route or an overlay page); only when it has
+      // nothing to pop does the declarative tab pop apply. Checking
+      // `_overlayStack` alone used to pop the page beneath an open dialog.
+      // root navigator 承载 shell route、我们的 overlay 页与框架级路由
+      // （dialog / sheet）。先让它 pop 自己的栈顶路由（框架级路由或 overlay
+      // 页）；只有当它无可 pop 内容时才走声明式 tab pop。此前只判断
+      // `_overlayStack` 会在对话框打开时 pop 其下方的页面。
+      if (nav.canPop()) {
         nav.pop(result);
         return;
       }
@@ -897,6 +1040,13 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       return false;
     }
     if (nav == _rootNavigatorKey.currentState) {
+      // A framework route (dialog / sheet) on the root navigator encloses
+      // every page: it pops first, without consulting route hooks.
+      // root navigator 上的框架级路由（dialog / sheet）包裹着所有页面：
+      // 优先 pop，且不询问路由钩子。
+      if (_rootRouteCounter.hasImperativeRoute) {
+        return nav.maybePop(result);
+      }
       if (_overlayStack.isNotEmpty) {
         if (!await _checkOnExit(_overlayStack.last.match.route.onExit)) {
           return true;
@@ -1038,6 +1188,17 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
 
   @override
   Future<bool> popRoute() async {
+    // Framework routes (dialogs, bottom sheets) live on the ROOT navigator
+    // above the shell route (and above any overlay page) — they pop first,
+    // without consulting our route hooks. The branch navigator below cannot
+    // see them, and consulting it first would pop the page beneath.
+    // 框架级路由（dialog、bottom sheet）位于 root navigator，处于 shell route
+    // （及 overlay 页）之上，优先 pop，且不询问路由钩子。下方的 branch
+    // navigator 看不到它们，先询问它会 pop 掉其下方的页面。
+    final rootNav = _rootNavigatorKey.currentState;
+    if (rootNav != null && _rootRouteCounter.hasImperativeRoute) {
+      return rootNav.maybePop();
+    }
     // Fullscreen overlay routes cover everything and pop first.
     // fullscreen 覆盖路由覆盖一切，优先 pop。
     if (_overlayStack.isNotEmpty) {
@@ -1138,6 +1299,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       state: _shellState!,
       child: Navigator(
         key: _rootNavigatorKey,
+        observers: _rootObservers,
         pages: <Page<Object?>>[
           _ShellPage(delegate: this),
           for (final entry in _overlayStack) entry.page,
@@ -1198,10 +1360,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     final visible = stack.length >= 2 ? stack.sublist(stack.length - 2) : stack;
     final panes = <Widget>[];
     for (var i = 0; i < visible.length; i++) {
-      panes.add(_buildPaneContent(context, visible[i], i == 0));
-    }
-    if (visible.length == 1) {
-      panes.add(_placeholderFor(context, _currentTab));
+      panes.add(_buildPane(context, visible[i], isMaster: i == 0));
     }
     final paneView = SlidingPanes(
       leftPaneFraction: _leftPaneFraction,
@@ -1212,6 +1371,13 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       resizeHandleWidth: resizeHandleWidth,
       resizeHandleBuilder: resizeHandleBuilder,
       paneBuilder: paneBuilder,
+      // The empty-detail hint rides in its own slot: as a second child it
+      // would mask the 1 ↔ 2 count that drives the expand / collapse
+      // transition. / 空详情提示走独立参数：作为第二个 child 会掩盖驱动
+      // 展开 / 收起转场的 1 ↔ 2 计数变化。
+      placeholder: visible.length == 1
+          ? _placeholderFor(context, _currentTab)
+          : null,
       onLeftPaneFractionChanged: (fraction) {
         _leftPaneFraction = fraction;
       },
@@ -1243,6 +1409,22 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     );
   }
 
+  /// Wraps one pane in a stable key so [SlidingPanes] can tell a rebuild
+  /// (same pane, new instance) from a master replacement (deeper push) and
+  /// from an expand / collapse — without the key, transitions are skipped.
+  /// 为单个 pane 包裹稳定键，使 [SlidingPanes] 能区分普通重建（同一 pane、
+  /// 新实例）、master 替换（更深层级 push）与展开 / 收起——无键则跳过转场。
+  Widget _buildPane(
+    BuildContext context,
+    _StackEntry entry, {
+    required bool isMaster,
+  }) {
+    return KeyedSubtree(
+      key: ValueKey('pane:${entry.match.location}'),
+      child: _buildPaneContent(context, entry, isMaster),
+    );
+  }
+
   Widget _placeholderFor(BuildContext context, int tabIndex) {
     return _tabs[tabIndex].placeholder ??
         placeholder ??
@@ -1262,7 +1444,15 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     bool isMaster,
   ) {
     final match = entry.match;
+    // `pageKey` is the stable handoff key: when the window width crosses a
+    // breakpoint the page content (a route on compact / medium, a pane here)
+    // is rebuilt in a different subtree, and the keyed element moves in the
+    // same frame instead of being recreated — scroll offsets and text input
+    // survive. / `pageKey` 是稳定的交接键：窗口宽度跨越断点时页面内容
+    // （compact / medium 是 route，此处是 pane）会在不同子树中重建，带键的
+    // 元素于同帧移动而非重建——滚动偏移与文本输入得以保留。
     final pane = ZeroRouteStateScope(
+      key: match.state.pageKey,
       state: match.state,
       child: ZeroPaneScope(
         title: match.title,
@@ -1287,7 +1477,11 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   }) {
     final match = entry.match;
     final route = match.route;
+    // Keyed with the same `pageKey` the expanded pane uses, so the content
+    // subtree is handed over in the same frame when the width class changes.
+    // 与 expanded pane 使用同一个 `pageKey`，宽度档位变化时内容子树于同帧交接。
     final content = ZeroRouteStateScope(
+      key: match.state.pageKey,
       state: match.state,
       child: ZeroPaneScope(
         title: null,

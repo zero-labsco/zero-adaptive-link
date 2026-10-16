@@ -11,14 +11,18 @@ import 'package:zero_adaptive_link/src/router/router.dart';
 class ZeroRouteState {
   /// Create the immutable state of one route match.
   /// 创建一次路由匹配的不可变状态。
-  const ZeroRouteState({
+  ///
+  /// Not `const`: every state carries a stable [pageKey] (see below), which
+  /// cannot be a constant expression.
+  /// 非 `const`：每个状态都携带稳定的 [pageKey]（见下），它不是常量表达式。
+  ZeroRouteState({
     required this.fullPath,
     required this.location,
     this.route,
     this.pathParameters = const <String, String>{},
     this.queryParameters = const <String, String>{},
     this.arguments,
-  });
+  }) : pageKey = GlobalKey(debugLabel: 'ZeroRoutePage:$location');
 
   /// The full route pattern that matched (e.g. `/products/:id`).
   /// 匹配到的完整路由 pattern（例如 `/products/:id`）。
@@ -41,6 +45,20 @@ class ZeroRouteState {
 
   /// Extra arguments passed at navigation time. / 导航时传入的额外参数。
   final Object? arguments;
+
+  /// A stable key for this page's content. / 该页面内容的稳定键。
+  ///
+  /// The plugin keys the content of every page — branch pages on compact /
+  /// medium and panes on expanded alike — with this key, so the **same
+  /// subtree is handed over in the same frame** when the window width crosses
+  /// a breakpoint: scroll offsets, text input and other element state survive
+  /// instead of resetting. Applications may read it to key their own content
+  /// the same way.
+  /// 插件以该键标记每个页面的内容——compact / medium 的 branch 页面与
+  /// expanded 的 pane 一视同仁——从而在窗口宽度跨越断点时于**同帧**交接
+  /// **同一子树**：滚动偏移、文本输入等元素状态得以保留而非重置。应用也可
+  /// 读取它为自己的内容加同样的键。
+  final GlobalKey pageKey;
 
   /// The location as a [Uri] (query included). / 带 query 的 [Uri] 形式 location。
   Uri get uri => Uri.parse(location);

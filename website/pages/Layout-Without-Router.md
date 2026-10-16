@@ -24,6 +24,10 @@ SlidingPanes(
   一个子组件为单列；两个为 master-detail。
 - Growing from one to two children slides the detail in from the side set by `side` while the master yields the opposite side; shrinking reverses the animation.
   从 1 个变为 2 个时 detail 从 `side` 指定的一侧滑入、master 让出相反一侧；变回 1 个时动画反向。
+- Pass a `placeholder` to fill the detail column while there is a single child (an empty-detail hint). Keep it free of a `Key` — the second child's key is how the layout tells an expand / collapse from a plain rebuild.
+  传入 `placeholder` 可在只有一个子组件时填充 detail 列（空详情提示）。请勿为其设置 `Key`——布局通过第二个 child 的键区分展开 / 收起与普通重建。
+- When the **master** is replaced while two columns show (give the children stable keys to opt in), the viewport slides left by one column: the replaced master exits on its side, the new pair slides in from the detail side. A pop (the old master becomes the new detail) slides it back. Replacing only the detail updates in place.
+  双列展示期间 **master** 被替换时（为 children 提供稳定键即可启用），视口整体左移一列：被替换的 master 向自己一侧退出，新的一对从 detail 一侧滑入。pop（旧 master 成为新 detail）则反向移回。仅替换 detail 时原地更新。
 - The detail expands to the **right** by default (`side: SlidingPanesSide.right`, master on the left). Set `side: SlidingPanesSide.left` to mirror the layout — master on the right, detail slides in from the left.
   默认 detail 向**右**展开（`side: SlidingPanesSide.right`，master 在左）。设 `side: SlidingPanesSide.left` 可镜像布局——master 在右、detail 从左滑入。
 - The default `paneBuilder` renders a card when the pane is wide and a flat surface when narrow.

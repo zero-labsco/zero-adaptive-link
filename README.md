@@ -17,7 +17,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 Upgrade recommended:** `0.2.0` makes the modal route properties actually work — `barrierDismissible` now dismisses a fullscreen route when you tap its barrier, and `fullscreenDialog` now reaches the created route (dialog transition, no back-swipe). It also fixes a leaked `pushNamed` future for fullscreen pages (a new navigation while an overlay was open used to leave it pending forever), re-encodes percent-encoded path parameters so locations round-trip unchanged, and replaces bare `StateError`s with friendly asserts for empty route tables. All users are encouraged to upgrade to the latest version (`^0.2.0`).
+> **🔔 Upgrade recommended:** `0.3.0` keeps page state across breakpoint crossings — pages and expanded panes now hand the same subtree over in the same frame, so scroll offsets and text input survive a window resize. The detail pane slides in on its first expansion, a deeper push slides the viewport left by one column, and system back / Escape / `popFrom` now dismiss an open dialog first instead of popping the page beneath it. It also fixes an async navigation race (the last requested location now always wins), makes `pushReplacementNamed` replace a branch root instead of stacking on it, and adds `ZeroNav.goTab` plus `ZeroRouteState.pageKey`. All users are encouraged to upgrade to the latest version (`^0.3.0`).
 
 🌐 **[Official Website](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[View on pub.dev](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[View on GitHub](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -44,6 +44,8 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 - **One `onTap`, every width** — wrap any tappable widget with `ZeroLink` (or call `ZeroNav` imperatively); the plugin decides by **window width**, not device type, so foldables, small desktop windows and browser zoom all behave correctly.
 - **Breakpoints by window width** — `< 600` compact pushes a page, `600 – 839` medium pushes a page (single column), `>= 840` expanded expands or updates the right sidebar pane.
 - **Master-detail pane semantics** — the detail pane slides in from the side set by `paneSide` (right by default, or left to mirror the layout: master on the right, detail from the left); a draggable resize handle splits the two columns; three or more columns are deliberately out of scope.
+- **Animated pane transitions** — the detail pane slides in on its first expansion, a deeper push slides the viewport left by one column (the replaced master exits, the new pair slides in), and a pop slides it back.
+- **State survives width changes** — pages and expanded panes hand the same subtree over in the same frame when the window crosses a breakpoint, so scroll offsets and text input do not reset; the stable key is exposed as `ZeroRouteState.pageKey`.
 - **Expand left or right** — pick `SlidingPanesSide.right` (master on the left) or `SlidingPanesSide.left` (master on the right) via `paneSide`, and flip it at runtime with `paneSideListenable` without rebuilding the router.
 - **Pane sizing with a ceiling** — set `leftPaneFraction` for the initial split and `maxLeftPaneWidth` so the master pane still scales with the window but stops at a sane width on ultra-wide displays (the detail pane absorbs the remainder; dragging respects the ceiling too).
 - **Idempotent focus** — tapping an already visible pane focuses it instead of stacking a duplicate.
@@ -70,7 +72,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.2.0
+  zero_adaptive_link: ^0.3.0
 ```
 
 ### GitHub
@@ -80,7 +82,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.2.0   # replace 0.2.0 with the version you need
+      ref: release/v0.3.0   # replace 0.3.0 with the version you need
 ```
 
 ---

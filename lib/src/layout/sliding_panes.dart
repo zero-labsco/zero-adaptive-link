@@ -52,6 +52,19 @@ typedef SlidingResizeHandleBuilder =
 /// [SlidingPanesSide.left] 可镜像布局——master 在右、detail 从左滑入。三列及以上
 /// 不在 v0.1.0 范围内。
 ///
+/// When the **master** is replaced while two columns are shown (a deeper push:
+/// the old detail becomes the new master), the viewport slides left by one
+/// column — the replaced master exits on the master side while the new pair
+/// slides in from the detail side. Give the pane children stable keys (e.g.
+/// `KeyedSubtree(key: ValueKey(location), child: pane)`) to opt in; without
+/// keys the replacement happens in place. Replacing only the **detail** (e.g. a
+/// `pushReplacementNamed` on the top page) always updates in place.
+/// 当双列展示期间 **master** 被替换（更深层级 push：旧 detail 成为新 master）时，
+/// 视口整体左移一列——被替换的 master 向 master 侧退出，新的一对从 detail 侧滑入。
+/// 为 pane children 提供稳定键（如 `KeyedSubtree(key: ValueKey(location), child: pane)`）
+/// 即可启用该转场；无键时替换原地发生。仅替换 **detail**（如对栈顶页面
+/// `pushReplacementNamed`）始终原地更新。
+///
 /// Usable without any router: feed it plain widgets.
 /// 无需路由即可使用：直接传入普通组件。
 class SlidingPanes extends StatefulWidget {
@@ -59,6 +72,7 @@ class SlidingPanes extends StatefulWidget {
   /// 使用 1 个或 2 个 [children] 创建滑动 pane 布局。
   const SlidingPanes({
     required this.children,
+    this.placeholder,
     this.leftPaneFraction = 0.4,
     this.maxLeftPaneWidth,
     this.side = SlidingPanesSide.right,
@@ -76,6 +90,15 @@ class SlidingPanes extends StatefulWidget {
   /// pane 内容：1 个为单列，2 个为 master-detail。
   final List<Widget> children;
 
+  /// Rendered as the detail column while [children] has a single entry (an
+  /// empty-detail hint, for instance). Keep it free of a `Key`: the key of the
+  /// second child is how the layout tells an expand / collapse (placeholder ↔
+  /// detail) from a plain rebuild.
+  /// 当 [children] 只有一个条目时作为 detail 列渲染（例如空详情提示）。请勿为它
+  /// 设置 `Key`：布局正是通过第二个 child 的键来区分展开 / 收起（占位内容 ↔
+  /// 详情）与普通重建的。
+  final Widget? placeholder;
+
   /// Fraction of the width taken by the master pane (0.15 – 0.85), regardless
   /// of which side it sits on.
   /// master pane 占据的宽度比例（0.15 – 0.85），不随其所在左右侧改变。
@@ -86,7 +109,7 @@ class SlidingPanes extends StatefulWidget {
   /// The pane still scales with [leftPaneFraction], but never grows past this
   /// width — on an ultra-wide window the detail pane absorbs the remainder
   /// instead of both columns stretching. `null` (the default) means no ceiling.
-  /// pane 仍按 [leftPaneFraction] 缩放，但绝不超过该宽度——在超宽窗口上由
+  /// pane 仍按 [leftPaneFraction] 缩放，但绝不超过该宽度——超宽窗口上由
   /// detail pane 吸收剩余空间，而不是两栏一起被拉宽。`null`（默认）表示不设上限。
   final double? maxLeftPaneWidth;
 
@@ -96,10 +119,10 @@ class SlidingPanes extends StatefulWidget {
   /// 默认 [SlidingPanesSide.right]（master 在左）。
   final SlidingPanesSide side;
 
-  /// Duration of the pane slide animation. / pane 滑动动画时长。
+  /// Duration of the pane slide animation. / pane 滑动时长。
   final Duration slideDuration;
 
-  /// Curve of the pane slide animation. / pane 滑动动画曲线。
+  /// Curve of the pane slide animation. / pane 滑动曲线。
   final Curve slideCurve;
 
   /// Hit width of the resize handle. / 分割线的命中宽度。
@@ -122,9 +145,9 @@ class SlidingPanes extends StatefulWidget {
   /// needs the per-frame [onLeftPaneFractionChanged]; this callback is the
   /// commit point, so a listener can react once per drag instead of per frame
   /// (e.g. republishing the fraction to the rest of the app).
-  /// 用户松开分割线时回调一次。实时拖拽只需要逐帧的
-  /// [onLeftPaneFractionChanged]；本回调是「提交点」，监听者可每轮拖拽只
-  /// 反应一次（例如把比例发布给应用其余部分），而非每帧一次。
+  /// 用户松开分割线时回调一次。实时拖拽只需要逐帧的 [onLeftPaneFractionChanged]；
+  /// 本回调是「提交点」，监听者可每轮拖拽只反应一次（例如把比例发布给应用其余
+  /// 部分），而非每帧一次。
   final ValueChanged<double>? onLeftPaneFractionDragEnd;
 
   @override
@@ -132,8 +155,18 @@ class SlidingPanes extends StatefulWidget {
 }
 
 class _SlidingPanesState extends State<SlidingPanes>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+  /// Drives the expand (0 → 1) and collapse (1 → 0) of the detail column.
+  /// 驱动 detail 列的展开（0 → 1）与收起（1 → 0）。
   late final AnimationController _revealController = AnimationController(
+    vsync: this,
+    duration: widget.slideDuration,
+    value: 1,
+  );
+
+  /// Drives the master-replacement shift (0 → 1): the viewport slides left by
+  /// one column. / 驱动 master 替换的水平转场（0 → 1）：视口整体左移一列。
+  late final AnimationController _shiftController = AnimationController(
     vsync: this,
     duration: widget.slideDuration,
     value: 1,
@@ -145,20 +178,52 @@ class _SlidingPanesState extends State<SlidingPanes>
   double _dragStartX = 0;
   bool _dragActive = false;
   bool _hoveringHandle = false;
-  List<Widget> _exitingChildren = const [];
+
+  /// The detail pane kept mounted while a collapse animation plays (its entry
+  /// already left the stack). / 收起动画播放期间保持挂载的 detail pane
+  /// （其条目已离开栈）。
+  Widget? _exitingDetail;
+
+  /// The replaced master pane kept mounted while a shift animation plays.
+  /// 水平转场播放期间保持挂载的被替换 master pane。
+  Widget? _exitingMaster;
 
   @override
   void initState() {
     super.initState();
     _fraction = widget.leftPaneFraction;
-    if (widget.children.length >= 2) {
-      _exitingChildren = widget.children;
+    // Retire the exiting panes once their animation finishes: leaving them
+    // mounted would keep defunct page subtrees (and their GlobalKeys) alive
+    // forever. / 动画结束后即退下还在挂载的 pane：一直挂着会让已失效的页面
+    // 子树（及其 GlobalKey）永不释放。
+    _revealController.addStatusListener(_onRevealStatusChanged);
+    _shiftController.addStatusListener(_onShiftStatusChanged);
+  }
+
+  void _onRevealStatusChanged(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && _exitingDetail != null) {
+      setState(() => _exitingDetail = null);
+    }
+  }
+
+  void _onShiftStatusChanged(AnimationStatus status) {
+    // Both shift directions retire their exiting pane on completion: the
+    // push keeps the replaced master, the pop the exiting detail.
+    // 两个方向的水平转场都在完成时退下退出中的 pane：push 保留被替换的
+    // master，pop 保留退出中的 detail。
+    if (status == AnimationStatus.completed &&
+        (_exitingMaster != null || _exitingDetail != null)) {
+      setState(() {
+        _exitingMaster = null;
+        _exitingDetail = null;
+      });
     }
   }
 
   @override
   void dispose() {
     _revealController.dispose();
+    _shiftController.dispose();
     super.dispose();
   }
 
@@ -167,17 +232,85 @@ class _SlidingPanesState extends State<SlidingPanes>
     super.didUpdateWidget(oldWidget);
     if (widget.slideDuration != oldWidget.slideDuration) {
       _revealController.duration = widget.slideDuration;
+      _shiftController.duration = widget.slideDuration;
     }
-    if (widget.children.length >= 2) {
-      _exitingChildren = widget.children;
-      if (oldWidget.children.length < 2) {
-        _revealController.forward();
-      }
-    } else if (oldWidget.children.length >= 2) {
-      // Keep the exiting panes mounted while the reverse animation plays.
-      // 反向动画播放期间保持退场 pane 挂载。
-      _exitingChildren = oldWidget.children;
+    final oldCount = oldWidget.children.length;
+    final newCount = widget.children.length;
+    // The key of the second child is the detail-pane identity: `null` means
+    // "no detail" (a single column, or the placeholder column). Standalone
+    // children without keys therefore never trigger a transition — which is
+    // the safe default.
+    // 第二个 child 的键即 detail pane 的身份标识：`null` 表示「无详情」
+    // （单列，或占位列）。因此未加键的独立使用方永远不会触发转场——这是
+    // 安全的默认行为。
+    final oldDetailKey = oldCount >= 2 ? oldWidget.children[1].key : null;
+    final newDetailKey = newCount >= 2 ? widget.children[1].key : null;
+    final oldMasterKey = oldCount >= 1 ? oldWidget.children[0].key : null;
+    final newMasterKey = newCount >= 1 ? widget.children[0].key : null;
+
+    if (newCount >= 2 &&
+        (oldCount < 2 ||
+            oldDetailKey != newDetailKey && oldDetailKey == null)) {
+      // Expand: the detail column appeared. Start hidden so the slide plays
+      // (the controller starts at 1, so a bare `forward()` would be a no-op).
+      // 展开：detail 列出现。从隐藏状态开始，滑动才能播放（controller 初始
+      // 为 1，直接 `forward()` 是空操作）。
+      // Controllers first: their status listeners may retire stale exiting
+      // panes, and that must happen before the fields are reassigned.
+      // 先动控制器：其状态监听器会清掉过期的退出中 pane，必须发生在字段
+      // 重新赋值之前。
+      _shiftController.value = 1;
+      _revealController.value = 0;
+      _exitingMaster = null;
+      _exitingDetail = null;
+      _revealController.forward();
+    } else if (oldCount >= 2 &&
+        (newCount < 2 || newDetailKey == null && oldDetailKey != null)) {
+      // Collapse: the detail column went away. Keep the exiting detail
+      // mounted for the reverse animation — unless the surviving master IS
+      // that detail (same key), which would mount its GlobalKey twice.
+      // 收起：detail 列消失。保持退出中的 detail 挂载以播放反向动画——除非
+      // 存留的 master 就是该 detail（同键），那会让它的 GlobalKey 被挂载两次。
+      _exitingMaster = null;
+      _shiftController.value = 1;
+      final detailIsNewMaster =
+          newMasterKey != null && newMasterKey == oldDetailKey;
+      _exitingDetail = detailIsNewMaster ? null : oldWidget.children[1];
       _revealController.reverse();
+    } else if (newCount >= 2 &&
+        oldCount >= 2 &&
+        newDetailKey != null &&
+        oldDetailKey != null &&
+        newMasterKey != oldMasterKey) {
+      // Both columns kept showing but the master moved: a one-column shift of
+      // the viewport. The direction follows the stack semantics.
+      // 双列保持不变但 master 发生了移动：视口整体平移一列。方向遵循栈的语义。
+      _revealController.value = 1;
+      _shiftController.value = 0;
+      if (newMasterKey == oldDetailKey) {
+        // Deeper push: the old detail became the new master. The replaced
+        // master exits on the master side while the new pair slides in from
+        // the detail side. / 更深层级 push：旧 detail 成为新 master。被替换的
+        // master 向 master 侧退出，新的一对从 detail 侧滑入。
+        _exitingDetail = null;
+        _exitingMaster = oldWidget.children[0];
+        _shiftController.forward();
+      } else if (newDetailKey == oldMasterKey) {
+        // Pop: the old master became the new detail — the mirror image, the
+        // viewport slides back by one column. / 弹出一层：旧 master 成为新
+        // detail——镜像转场，视口反向平移一列。
+        _exitingMaster = null;
+        _exitingDetail = oldWidget.children[1];
+        _shiftController.forward();
+      } else {
+        // Both panes replaced wholesale (an external navigation): update in
+        // place. / 两个 pane 被整体替换（外部导航）：原地更新。
+        _exitingMaster = null;
+        _exitingDetail = null;
+      }
+    } else {
+      _exitingMaster = null;
+      _exitingDetail = null;
     }
     if (!_dragging && widget.leftPaneFraction != oldWidget.leftPaneFraction) {
       _fraction = widget.leftPaneFraction;
@@ -308,23 +441,28 @@ class _SlidingPanesState extends State<SlidingPanes>
       return const SizedBox.shrink();
     }
     final masterIsLeft = widget.side == SlidingPanesSide.right;
-    final reveal = _revealController.value;
-    if (count == 1 && reveal <= 0) {
-      return _wrapPane(context, widget.children[0], masterIsLeft);
-    }
-
     final master = widget.children[0];
-    final detail = count >= 2
-        ? widget.children[1]
-        : (_exitingChildren.length >= 2 ? _exitingChildren[1] : null);
+
+    // The detail column: the live detail, the exiting detail mid-collapse, or
+    // the placeholder — in that order of availability.
+    // detail 列：实时详情、收起动画退出中的详情、占位内容——按可用性取此顺序。
+    Widget? detail;
+    if (count >= 2) {
+      detail = widget.children[1];
+    } else if (_revealController.value > 0 && _exitingDetail != null) {
+      detail = _exitingDetail;
+    } else {
+      detail = widget.placeholder;
+    }
     if (detail == null) {
       return _wrapPane(context, master, masterIsLeft);
     }
 
     return AnimatedBuilder(
-      animation: _revealController,
+      animation: Listenable.merge([_revealController, _shiftController]),
       builder: (context, _) {
-        final t = widget.slideCurve.transform(_revealController.value);
+        final reveal = widget.slideCurve.transform(_revealController.value);
+        final shift = widget.slideCurve.transform(_shiftController.value);
         return LayoutBuilder(
           builder: (context, constraints) {
             _totalWidth = constraints.maxWidth;
@@ -333,71 +471,353 @@ class _SlidingPanesState extends State<SlidingPanes>
             final masterWidth = _masterWidthFor(total - handleWidth, _fraction);
             final detailWidth = total - handleWidth - masterWidth;
             final masterChild = _wrapPane(context, master, masterIsLeft);
-            final detailChild = _wrapPane(context, detail, !masterIsLeft);
-            final handle = Opacity(opacity: t, child: _buildHandle(context));
-            if (masterIsLeft) {
-              // Master on the left; detail slides in from the right.
-              // master 在左；detail 从右滑入。
-              final leftWidth = total + (masterWidth - total) * t;
-              final rightOffset = (1 - t) * detailWidth;
-              return Stack(
-                children: [
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: leftWidth,
-                    child: masterChild,
-                  ),
-                  Positioned(
-                    left: leftWidth,
-                    top: 0,
-                    bottom: 0,
-                    width: handleWidth,
-                    child: handle,
-                  ),
-                  Positioned(
-                    left: leftWidth + handleWidth + rightOffset,
-                    top: 0,
-                    bottom: 0,
-                    width: detailWidth,
-                    child: ClipRect(child: detailChild),
-                  ),
-                ],
-              );
+            final detailChild = _wrapPane(context, detail!, !masterIsLeft);
+            final exitingMaster = _exitingMaster;
+            final exitingDetail = _exitingDetail;
+            if (shift < 1 && count >= 2) {
+              if (exitingMaster != null) {
+                // Deeper push: the replaced master exits on the master side.
+                // 更深层级 push：被替换的 master 向 master 侧退出。
+                return _buildPushShiftLayout(
+                  context: context,
+                  masterIsLeft: masterIsLeft,
+                  total: total,
+                  handleWidth: handleWidth,
+                  masterWidth: masterWidth,
+                  detailWidth: detailWidth,
+                  t: shift,
+                  masterChild: masterChild,
+                  detailChild: detailChild,
+                  exitingMaster: exitingMaster,
+                );
+              }
+              if (exitingDetail != null) {
+                // Pop: the exiting detail slides out on the detail side.
+                // 弹出一层：退出中的 detail 向 detail 侧滑出。
+                return _buildPopShiftLayout(
+                  context: context,
+                  masterIsLeft: masterIsLeft,
+                  total: total,
+                  handleWidth: handleWidth,
+                  masterWidth: masterWidth,
+                  detailWidth: detailWidth,
+                  t: shift,
+                  masterChild: masterChild,
+                  detailChild: detailChild,
+                  exitingDetail: exitingDetail,
+                );
+              }
             }
-            // Master on the right; detail slides in from the left.
-            // master 在右；detail 从左滑入。
-            final masterLeft = (detailWidth + handleWidth) * t;
-            final detailLeft = -detailWidth * (1 - t);
-            return Stack(
-              children: [
-                Positioned(
-                  left: detailLeft,
-                  top: 0,
-                  bottom: 0,
-                  width: detailWidth,
-                  child: ClipRect(child: detailChild),
-                ),
-                Positioned(
-                  left: masterLeft - handleWidth,
-                  top: 0,
-                  bottom: 0,
-                  width: handleWidth,
-                  child: handle,
-                ),
-                Positioned(
-                  left: masterLeft,
-                  top: 0,
-                  bottom: 0,
-                  width: total - masterLeft,
-                  child: masterChild,
-                ),
-              ],
+            return _buildRevealLayout(
+              context: context,
+              masterIsLeft: masterIsLeft,
+              total: total,
+              handleWidth: handleWidth,
+              masterWidth: masterWidth,
+              detailWidth: detailWidth,
+              t: reveal,
+              masterChild: masterChild,
+              detailChild: detailChild,
             );
           },
         );
       },
+    );
+  }
+
+  /// The resting / expand / collapse layout: `t == 1` is the final two-column
+  /// arrangement, `t == 0` is the master filling the whole width.
+  /// 静止 / 展开 / 收起布局：`t == 1` 为最终双列，`t == 0` 为 master 占满宽度。
+  Widget _buildRevealLayout({
+    required BuildContext context,
+    required bool masterIsLeft,
+    required double total,
+    required double handleWidth,
+    required double masterWidth,
+    required double detailWidth,
+    required double t,
+    required Widget masterChild,
+    required Widget detailChild,
+  }) {
+    final handle = Opacity(opacity: t, child: _buildHandle(context));
+    if (masterIsLeft) {
+      // Master on the left; detail slides in from the right.
+      // master 在左；detail 从右滑入。
+      final leftWidth = total + (masterWidth - total) * t;
+      final rightOffset = (1 - t) * detailWidth;
+      return Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: leftWidth,
+            child: masterChild,
+          ),
+          Positioned(
+            left: leftWidth,
+            top: 0,
+            bottom: 0,
+            width: handleWidth,
+            child: handle,
+          ),
+          Positioned(
+            left: leftWidth + handleWidth + rightOffset,
+            top: 0,
+            bottom: 0,
+            width: detailWidth,
+            child: ClipRect(child: detailChild),
+          ),
+        ],
+      );
+    }
+    // Master on the right; detail slides in from the left.
+    // master 在右；detail 从左滑入。
+    final masterLeft = (detailWidth + handleWidth) * t;
+    final detailLeft = -detailWidth * (1 - t);
+    return Stack(
+      children: [
+        Positioned(
+          left: detailLeft,
+          top: 0,
+          bottom: 0,
+          width: detailWidth,
+          child: ClipRect(child: detailChild),
+        ),
+        Positioned(
+          left: masterLeft - handleWidth,
+          top: 0,
+          bottom: 0,
+          width: handleWidth,
+          child: handle,
+        ),
+        Positioned(
+          left: masterLeft,
+          top: 0,
+          bottom: 0,
+          width: total - masterLeft,
+          child: masterChild,
+        ),
+      ],
+    );
+  }
+
+  /// The deeper-push layout: the whole viewport slides left (or right, when
+  /// the master sits on the right) by one column — the replaced master exits
+  /// on its side while the new pair slides in from the detail side.
+  /// 更深层级 push 布局：整个视口左移（master 在右时右移）一列——被替换的
+  /// master 向自己一侧退出，新的一对从 detail 一侧滑入。
+  ///
+  /// At `t == 0` the arrangement is pixel-identical to the pre-push state (the
+  /// new master sits exactly where the old detail sat, at the detail column's
+  /// width), so the slide starts seamlessly.
+  /// `t == 0` 时布局与 push 前逐像素一致（新 master 正落在旧 detail 的位置，
+  /// 宽度亦为 detail 列宽），滑动因此无缝起始。
+  Widget _buildPushShiftLayout({
+    required BuildContext context,
+    required bool masterIsLeft,
+    required double total,
+    required double handleWidth,
+    required double masterWidth,
+    required double detailWidth,
+    required double t,
+    required Widget masterChild,
+    required Widget detailChild,
+    required Widget exitingMaster,
+  }) {
+    final handle = Opacity(opacity: t, child: _buildHandle(context));
+    final exiting = Opacity(
+      opacity: 1 - t,
+      child: ClipRect(child: exitingMaster),
+    );
+    // The travelling pane morphs from the detail column width to the master
+    // column width (or back), so both ends of the slide line up exactly.
+    // 移动中的 pane 宽度从 detail 列宽渐变到 master 列宽（或反向），
+    // 使滑动两端精确衔接。
+    final travellingWidth = masterWidth + (detailWidth - masterWidth) * (1 - t);
+    if (masterIsLeft) {
+      final masterLeft = (masterWidth + handleWidth) * (1 - t);
+      final detailLeft = masterWidth + handleWidth + detailWidth * (1 - t);
+      return Stack(
+        children: [
+          Positioned(
+            left: -masterWidth * t,
+            top: 0,
+            bottom: 0,
+            width: masterWidth,
+            child: exiting,
+          ),
+          Positioned(
+            left: masterLeft,
+            top: 0,
+            bottom: 0,
+            width: travellingWidth,
+            child: masterChild,
+          ),
+          Positioned(
+            left: masterLeft + travellingWidth,
+            top: 0,
+            bottom: 0,
+            width: handleWidth,
+            child: handle,
+          ),
+          Positioned(
+            left: detailLeft,
+            top: 0,
+            bottom: 0,
+            width: detailWidth,
+            child: ClipRect(child: detailChild),
+          ),
+        ],
+      );
+    }
+    // Mirrored: the new master starts in the detail column (left) and slides
+    // right; the replaced master exits to the right.
+    // 镜像：新 master 从 detail 列（左）出发向右滑到位；被替换的 master 向右退出。
+    final masterFinalLeft = detailWidth + handleWidth;
+    final masterLeft = masterFinalLeft * t;
+    final detailLeft = -detailWidth * (1 - t);
+    return Stack(
+      children: [
+        Positioned(
+          left: detailLeft,
+          top: 0,
+          bottom: 0,
+          width: detailWidth,
+          child: ClipRect(child: detailChild),
+        ),
+        Positioned(
+          left: masterLeft - handleWidth,
+          top: 0,
+          bottom: 0,
+          width: handleWidth,
+          child: handle,
+        ),
+        Positioned(
+          left: masterLeft,
+          top: 0,
+          bottom: 0,
+          width: travellingWidth,
+          child: masterChild,
+        ),
+        Positioned(
+          left: masterFinalLeft + masterWidth * t,
+          top: 0,
+          bottom: 0,
+          width: masterWidth,
+          child: exiting,
+        ),
+      ],
+    );
+  }
+
+  /// The pop layout — the mirror image of [_buildPushShiftLayout]: the
+  /// viewport slides back by one column. The exiting detail slides out on the
+  /// detail side, the new master slides in from the master side, and the new
+  /// detail (the old master) travels from the master position to the detail
+  /// position, morphing its width on the way.
+  /// 弹出一层的布局——[_buildPushShiftLayout] 的镜像：视口反向平移一列。
+  /// 退出中的 detail 向 detail 一侧滑出，新 master 从 master 一侧滑入，新
+  /// detail（即旧 master）从 master 位置移动到 detail 位置，宽度随之渐变。
+  ///
+  /// At `t == 0` the arrangement is pixel-identical to the pre-pop state.
+  /// `t == 0` 时布局与 pop 前逐像素一致。
+  Widget _buildPopShiftLayout({
+    required BuildContext context,
+    required bool masterIsLeft,
+    required double total,
+    required double handleWidth,
+    required double masterWidth,
+    required double detailWidth,
+    required double t,
+    required Widget masterChild,
+    required Widget detailChild,
+    required Widget exitingDetail,
+  }) {
+    final handle = Opacity(opacity: t, child: _buildHandle(context));
+    final exiting = Opacity(
+      opacity: 1 - t,
+      child: ClipRect(child: exitingDetail),
+    );
+    final travellingWidth = detailWidth + (masterWidth - detailWidth) * (1 - t);
+    if (masterIsLeft) {
+      // The new detail starts in the master column and slides right; the new
+      // master enters from the left edge; the exiting detail leaves right.
+      // 新 detail 从 master 列出发向右滑到位；新 master 从左边缘滑入；
+      // 退出中的 detail 向右离场。
+      final masterLeft = -masterWidth * (1 - t);
+      final detailLeft = (masterWidth + handleWidth) * t;
+      return Stack(
+        children: [
+          Positioned(
+            left: masterLeft,
+            top: 0,
+            bottom: 0,
+            width: masterWidth,
+            child: masterChild,
+          ),
+          Positioned(
+            left: detailLeft - handleWidth,
+            top: 0,
+            bottom: 0,
+            width: handleWidth,
+            child: handle,
+          ),
+          Positioned(
+            left: detailLeft,
+            top: 0,
+            bottom: 0,
+            width: travellingWidth,
+            child: detailChild,
+          ),
+          Positioned(
+            left: masterWidth + handleWidth + detailWidth * t,
+            top: 0,
+            bottom: 0,
+            width: detailWidth,
+            child: exiting,
+          ),
+        ],
+      );
+    }
+    // Mirrored: the new detail starts in the master column (right) and slides
+    // left; the new master enters from the right edge; the exiting detail
+    // leaves left. / 镜像：新 detail 从 master 列（右）出发向左滑到位；新
+    // master 从右边缘滑入；退出中的 detail 向左离场。
+    final masterFinalLeft = detailWidth + handleWidth;
+    final masterLeft = masterFinalLeft + (total - masterFinalLeft) * (1 - t);
+    final detailLeft = masterFinalLeft * (1 - t);
+    return Stack(
+      children: [
+        Positioned(
+          left: -detailWidth * t,
+          top: 0,
+          bottom: 0,
+          width: detailWidth,
+          child: exiting,
+        ),
+        Positioned(
+          left: masterLeft,
+          top: 0,
+          bottom: 0,
+          width: masterWidth,
+          child: masterChild,
+        ),
+        Positioned(
+          left: detailLeft + travellingWidth,
+          top: 0,
+          bottom: 0,
+          width: handleWidth,
+          child: handle,
+        ),
+        Positioned(
+          left: detailLeft,
+          top: 0,
+          bottom: 0,
+          width: travellingWidth,
+          child: detailChild,
+        ),
+      ],
     );
   }
 }

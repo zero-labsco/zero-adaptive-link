@@ -140,6 +140,11 @@ class ZeroTab {
 
   /// Placeholder for the empty right pane; takes priority over the shell's.
   /// 空右 pane 的占位内容，优先于 shell 级占位内容。
+  ///
+  /// Keep it free of a `Key`: the layout tells an expand / collapse
+  /// (placeholder ↔ detail) from a plain rebuild by the second pane's key.
+  /// 请勿为其设置 `Key`：布局通过第二个 pane 的键区分展开 / 收起
+  /// （占位内容 ↔ 详情）与普通重建。
   final Widget? placeholder;
 }
 
@@ -166,6 +171,11 @@ class ZeroShell {
 
   /// Shell-level placeholder for the empty right pane.
   /// shell 级空右 pane 占位内容。
+  ///
+  /// Keep it free of a `Key`: the layout tells an expand / collapse
+  /// (placeholder ↔ detail) from a plain rebuild by the second pane's key.
+  /// 请勿为其设置 `Key`：布局通过第二个 pane 的键区分展开 / 收起
+  /// （占位内容 ↔ 详情）与普通重建。
   final Widget? placeholder;
 }
 
@@ -278,6 +288,13 @@ class ZeroRouter extends RouterConfig<String> {
   final Curve slideCurve;
 
   /// Wraps each pane. / 包裹每个 pane。
+  ///
+  /// Caveat: panes are clipped to their column, so a dropdown menu, tooltip
+  /// or dialog opened from inside a pane is clipped too unless it uses the
+  /// root navigator (`useRootNavigator: ZeroPaneScope.maybeOf(context) != null`).
+  /// 注意：pane 会被裁剪到其列内，因此从 pane 内部打开的下拉菜单、tooltip 或
+  /// 对话框同样会被裁剪，除非使用 root navigator
+  /// （`useRootNavigator: ZeroPaneScope.maybeOf(context) != null`）。
   final SlidingPaneBuilder? paneBuilder;
 
   /// Which side the detail pane expands toward when the layout is expanded.
