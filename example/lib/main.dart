@@ -141,6 +141,49 @@ class _ExampleAppState extends State<ExampleApp> {
               ),
             ],
           ),
+          ZeroTab(
+            initialLocation: '/settings',
+            routes: [
+              ZeroRoute(
+                path: '/settings',
+                title: (state) => 'Settings',
+                // Host a nested shell: this route renders the inner shell as its
+                // child. The inner shell owns its own Profile / Account tabs and
+                // re-resolves from the same location stack, so deep links like
+                // /settings/account restore the outer tab and the nested one.
+                // 承载一个嵌套 shell：本路由把内层 shell 作为 child 渲染。内层
+                // shell 拥有自己的 Profile / Account tab，并从同一份 location 栈
+                // 重新解析，因此 /settings/account 这样的深链会同时恢复外层与内层
+                // tab。
+                shell: ZeroShell(
+                  builder: _buildSettingsShell,
+                  tabs: [
+                    ZeroTab(
+                      initialLocation: '/settings/profile',
+                      routes: [
+                        ZeroRoute(
+                          path: '/profile',
+                          title: (state) => 'Profile',
+                          builder: buildProfile,
+                        ),
+                      ],
+                    ),
+                    ZeroTab(
+                      initialLocation: '/settings/account',
+                      routes: [
+                        ZeroRoute(
+                          path: '/account',
+                          title: (state) => 'Account',
+                          builder: buildAccount,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                shellBuilder: (context, state, child) => child,
+              ),
+            ],
+          ),
         ],
       ),
     ],
@@ -182,6 +225,11 @@ class _ExampleAppState extends State<ExampleApp> {
         selectedIcon: Icon(Icons.person),
         label: Text('You'),
       ),
+      NavigationRailDestination(
+        icon: Icon(Icons.settings_outlined),
+        selectedIcon: Icon(Icons.settings),
+        label: Text('Settings'),
+      ),
     ];
     const barDestinations = [
       NavigationDestination(
@@ -198,6 +246,11 @@ class _ExampleAppState extends State<ExampleApp> {
         icon: Icon(Icons.person_outline),
         selectedIcon: Icon(Icons.person),
         label: 'You',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.settings_outlined),
+        selectedIcon: Icon(Icons.settings),
+        label: 'Settings',
       ),
     ];
     if (shell.isCompact) {
@@ -240,6 +293,68 @@ class _ExampleAppState extends State<ExampleApp> {
           Expanded(child: _framed(child)),
         ],
       ),
+    );
+  }
+
+  /// The nested Settings shell: a second, inner tab set (Profile / Account) that
+  /// lives inside the `/settings` route. On compact it shows a top tab bar so it
+  /// does not collide with the outer bottom bar; on medium / expanded it shows a
+  /// secondary rail beside its content.
+  /// 嵌套的 Settings shell：位于 `/settings` 路由内部的第二层 tab 组（Profile /
+  /// Account）。compact 下用顶部 tab 条以避免与外层底栏冲突；medium / expanded
+  /// 下在其内容旁显示二级 rail。
+  Widget _buildSettingsShell(
+    BuildContext context,
+    ZeroShellState shell,
+    Widget child,
+  ) {
+    if (shell.isCompact) {
+      return Scaffold(
+        backgroundColor: AppColors.paper,
+        appBar: AppBar(
+          title: const Text('Settings'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(52),
+            child: _SettingsTabBar(shell: shell),
+          ),
+        ),
+        body: child,
+      );
+    }
+    return Row(
+      children: [
+        NavigationRail(
+          selectedIndex: shell.currentIndex,
+          onDestinationSelected: shell.goTab,
+          destinations: const [
+            NavigationRailDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: Text('Profile'),
+            ),
+            NavigationRailDestination(
+              icon: Icon(Icons.account_box_outlined),
+              selectedIcon: Icon(Icons.account_box),
+              label: Text('Account'),
+            ),
+          ],
+          labelType: NavigationRailLabelType.all,
+          backgroundColor: AppColors.surface,
+          selectedIconTheme: const IconThemeData(color: AppColors.pine),
+          selectedLabelTextStyle: const TextStyle(
+            color: AppColors.pine,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+          unselectedIconTheme: const IconThemeData(color: AppColors.muted),
+          unselectedLabelTextStyle: const TextStyle(
+            color: AppColors.muted,
+            fontSize: 12,
+          ),
+        ),
+        const VerticalDivider(width: 1, thickness: 1),
+        Expanded(child: child),
+      ],
     );
   }
 
@@ -438,6 +553,39 @@ class _PreviewBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A compact-only top tab bar for the nested Settings shell.
+/// 嵌套 Settings shell 在 compact 下专用的顶部 tab 条。
+class _SettingsTabBar extends StatelessWidget {
+  const _SettingsTabBar({required this.shell});
+
+  final ZeroShellState shell;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const SizedBox(width: 12),
+        SegmentedButton<int>(
+          selected: {shell.currentIndex},
+          onSelectionChanged: (selected) => shell.goTab(selected.first),
+          style: SegmentedButton.styleFrom(
+            backgroundColor: AppColors.surface,
+            selectedBackgroundColor: AppColors.pineTint,
+            foregroundColor: AppColors.inkSoft,
+            selectedForegroundColor: AppColors.pine,
+            side: const BorderSide(color: AppColors.hairline),
+            visualDensity: VisualDensity.compact,
+          ),
+          segments: const [
+            ButtonSegment(value: 0, label: Text('Profile')),
+            ButtonSegment(value: 1, label: Text('Account')),
+          ],
+        ),
+      ],
     );
   }
 }

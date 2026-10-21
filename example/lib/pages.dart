@@ -665,3 +665,43 @@ Widget buildLogin(
     ),
   );
 }
+
+// -------------------------------------------------------- nested settings --
+
+/// The nested Profile tab (one of the tabs inside the `/settings` shell).
+/// 嵌套的 Profile tab（(`/settings` shell 内的一个 tab）。
+Widget buildProfile(BuildContext context, ZeroRouteState state) {
+  return Scaffold(
+    key: const ValueKey('page-profile'),
+    backgroundColor: AppColors.paper,
+    appBar: AppBar(title: const Text('Profile'), bottom: const AppBarRule()),
+    body: ListView(
+      children: const [
+        DetailRow(label: 'Name', value: 'Avery Quinn'),
+        DetailRow(label: 'Role', value: 'Support lead'),
+        DetailRow(label: 'Locale', value: 'en-US'),
+        DetailRow(label: 'Time zone', value: 'UTC−05:00'),
+        DetailRow(label: 'Status', value: 'Active'),
+      ],
+    ),
+  );
+}
+
+/// The nested Account tab (the other tab inside the `/settings` shell).
+/// 嵌套的 Account tab（(`/settings` shell 内的另一个 tab）。
+Widget buildAccount(BuildContext context, ZeroRouteState state) {
+  return Scaffold(
+    key: const ValueKey('page-account'),
+    backgroundColor: AppColors.paper,
+    appBar: AppBar(title: const Text('Account'), bottom: const AppBarRule()),
+    body: ListView(
+      children: const [
+        DetailRow(label: 'Plan', value: 'Business · 12 seats'),
+        DetailRow(label: 'Status', value: 'Active'),
+        DetailRow(label: 'Renewal', value: '1st of month'),
+        DetailRow(label: 'Region', value: 'us-east'),
+        DetailRow(label: 'Seats used', value: '9 / 12'),
+      ],
+    ),
+  );
+}
