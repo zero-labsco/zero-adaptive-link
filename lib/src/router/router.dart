@@ -15,6 +15,15 @@ import 'package:zero_adaptive_link/src/router/state.dart';
 typedef ZeroRouteBuilder =
     Widget Function(BuildContext context, ZeroRouteState state);
 
+/// Builds the page content of a route that hosts a nested shell. The [child] is
+/// the nested shell widget produced by the plugin; ignore it to fall back to the
+/// child as-is. Only routes that set [ZeroRoute.shell] use this builder.
+/// 构建承载嵌套 shell 的路由的页面内容。[child] 是本插件产出的嵌套 shell 组件；
+/// 忽略它即等价于直接显示该 child。仅设置了 [ZeroRoute.shell] 的路由会用到本
+/// builder。
+typedef ZeroShellRouteBuilder =
+    Widget Function(BuildContext context, ZeroRouteState state, Widget child);
+
 /// Computes a route title once, at match time, without a `BuildContext`.
 /// 在 match 时求值一次、不依赖 `BuildContext` 的路由标题。
 typedef ZeroTitleBuilder = String Function(ZeroRouteState state);
@@ -67,6 +76,8 @@ class ZeroRoute {
     this.transitionsBuilder,
     this.loader,
     this.loadingBuilder,
+    this.shell,
+    this.shellBuilder,
     this.routes = const <ZeroRoute>[],
   });
 
@@ -132,6 +143,24 @@ class ZeroRoute {
   /// Nested routes, matched relative to this route's path.
   /// 嵌套路由，相对该路由路径匹配。
   final List<ZeroRoute> routes;
+
+  /// Page builder used when this route also hosts a nested shell via [shell].
+  /// Receives the nested shell widget as [ZeroShellRouteBuilder.child]; ignore it
+  /// to render the nested shell as-is. Mutually exclusive with [builder].
+  /// 当本路由还通过 [shell] 承载嵌套 shell 时使用的页面 builder。会得到嵌套 shell
+  /// 组件作为 [ZeroShellRouteBuilder.child]；忽略即原样渲染该嵌套 shell。与
+  /// [builder] 互斥。
+  final ZeroShellRouteBuilder? shellBuilder;
+
+  /// A nested shell hosted by this route: navigating into the route reveals the
+  /// shell's own tabs / panes. The route's builder receives the nested shell
+  /// widget as its `child` (see [ZeroRouteBuilder]); if the builder ignores the
+  /// child the nested shell will not appear. Mutually exclusive with [routes]
+  /// (use one or the other). / 该路由承载的嵌套 shell：进入该路由即展示其自身的
+  /// tabs / panes。路由的 builder 会以 `child` 收到嵌套 shell 组件（见
+  /// [ZeroRouteBuilder]）；若 builder 忽略该 child，嵌套 shell 不会显示。与
+  /// [routes] 互斥（二选一）。
+  final ZeroShell? shell;
 }
 
 /// One branch (tab) of the shell. / shell 的一个 branch（tab）。
@@ -225,6 +254,8 @@ class ZeroRouter extends RouterConfig<String> {
     this.escapePops = true,
     this.breadcrumbsBuilder,
     this.showBreadcrumbsOnBranch = false,
+    this.restoreScrollOffset = true,
+    this.restoreFocus = true,
     this.onNavigation,
     RouteInformationProvider? routeInformationProvider,
     RouteInformationParser<String>? routeInformationParser,
@@ -252,6 +283,8 @@ class ZeroRouter extends RouterConfig<String> {
            escapePops: escapePops,
            breadcrumbsBuilder: breadcrumbsBuilder,
            showBreadcrumbsOnBranch: showBreadcrumbsOnBranch,
+           restoreScrollOffset: restoreScrollOffset,
+           restoreFocus: restoreFocus,
            onNavigation: onNavigation,
          ),
          backButtonDispatcher: RootBackButtonDispatcher(),
@@ -377,6 +410,28 @@ class ZeroRouter extends RouterConfig<String> {
   /// 浏览器前进后退、深链）后触发，便于埋点与副作用。`null` 表示关闭。零
   /// 运行时依赖。
   final void Function(String location)? onNavigation;
+
+  /// The shareable URL for [location] under the web hash strategy
+  /// (e.g. `#/products/42`). Use it to build real `<a href>` anchors.
+  /// web hash 策略下 [location] 的可分享 URL（例如 `#/products/42`）。
+  /// 用它构建真实的 `<a href>` 锚点。
+  static String canonicalHref(String location) => '#$location';
+
+  /// Restore scroll offsets across breakpoint crossings and history changes via
+  /// `PageStorage` (one bucket per router). Key a `ScrollView` with
+  /// `PageStorageKey(state.restorationId)` to opt in its contents in. Enabled by
+  /// default. / 通过 `PageStorage`（每个 router 一个桶）在跨断点与历史变化时
+  /// 恢复滚动偏移。给 `ScrollView` 加 `PageStorageKey(state.restorationId)` 即可
+  /// 让其内容参与恢复。默认开启。
+  final bool restoreScrollOffset;
+
+  /// Restore primary focus across history changes (the same subtree is already
+  /// handed over on breakpoint crossings, so focus is preserved there). When a
+  /// route remounts after a pop, focus returns to the route that last held it.
+  /// Enabled by default. / 在历史变化时恢复主焦点（跨断点交接已复用同一子树，
+  /// 焦点本就保留）。pop 后某 route 重新挂载时，焦点回到上次持有它的 route。
+  /// 默认开启。
+  final bool restoreFocus;
 }
 
 /// Renders the error page for an unmatched location.

@@ -84,6 +84,14 @@ class ZeroRouteState {
   /// The location as a [Uri] (query included). / 带 query 的 [Uri] 形式 location。
   Uri get uri => Uri.parse(location);
 
+  /// A stable id for scroll / focus restoration; equals [location]. Pass it as a
+  /// `PageStorageKey` to a `ScrollView` so its offset survives breakpoint
+  /// crossings and history changes (see `ZeroRouter.restoreScrollOffset`).
+  /// 用于滚动 / 焦点恢复的稳定 id，等于 [location]。把它作为 `PageStorageKey`
+  /// 传给 `ScrollView`，其滚动偏移即可在跨断点与历史变化时保留（见
+  /// `ZeroRouter.restoreScrollOffset`）。
+  String get restorationId => location;
+
   /// Read the state of the route that is currently building this context.
   /// 读取当前构建该 context 的路由状态。
   static ZeroRouteState of(BuildContext context) {

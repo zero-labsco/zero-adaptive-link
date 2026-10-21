@@ -147,11 +147,42 @@ class ZeroRouteMatcher {
         state: state,
         title: route.title?.call(state),
       );
+      // A route may host a nested shell via `ZeroRoute.shell`; its tabs become
+      // the candidate children instead of `route.routes`.
+      // 路由可通过 `ZeroRoute.shell` 承载嵌套 shell；其 tabs 即为候选子节点，
+      // 取代 `route.routes`。
+      final children = route.shell != null
+          ? route.shell!.tabs.expand((t) => t.routes).toList()
+          : route.routes;
       if (consumed == segments.length) {
-        return [match];
+        if (route.shell != null) {
+          // The location ends at the shell host: descend into the shell's default
+          // tab (its first route, or its `initialLocation`) so its content shows,
+          // exactly like a top-level tab falls back to its default. / location
+          // 止于 shell 宿主：下钻进 shell 的默认 tab（其首条路由或 `initialLocation`）
+          // 使其内容显示，正如顶层 tab 回退到默认值。
+          final defaultTab = route.shell!.tabs.first;
+          final defaultPath =
+              defaultTab.initialLocation ?? defaultTab.routes.first.path;
+          final relativeDefault = defaultPath.startsWith('/')
+              ? defaultPath.substring(1)
+              : defaultPath;
+          final deeper = _matchTree(
+            routes: children,
+            segments: ZeroRouteMatcher.splitSegments(relativeDefault),
+            patternPrefix: newPatternPrefix,
+            actualPrefix: newActualPrefix,
+            inheritedParams: params,
+            query: query,
+            arguments: arguments,
+          );
+          if (deeper != null) return [match, ...deeper];
+        } else {
+          return [match];
+        }
       }
       final deeper = _matchTree(
-        routes: route.routes,
+        routes: children,
         segments: segments.sublist(consumed),
         patternPrefix: newPatternPrefix,
         actualPrefix: newActualPrefix,

@@ -147,6 +147,7 @@ class _ZeroPage extends Page<Object?> {
         context,
         entry,
         isBranchRoot: entry.isRoot,
+        stack: delegate._stackContaining(entry),
       ),
       config: _RouteConfig(
         opaque: entry.match.route.opaque,
@@ -305,6 +306,8 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     required this.escapePops,
     required this.breadcrumbsBuilder,
     required this.showBreadcrumbsOnBranch,
+    required this.restoreScrollOffset,
+    required this.restoreFocus,
     required this.onNavigation,
   }) : _paneSide = paneSide,
        _leftPaneFraction = initialLeftPaneFraction {
@@ -387,7 +390,23 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   final bool escapePops;
   final ZeroBreadcrumbsBuilder? breadcrumbsBuilder;
   final bool showBreadcrumbsOnBranch;
+  final bool restoreScrollOffset;
+  final bool restoreFocus;
   final void Function(String location)? onNavigation;
+
+  /// Shared `PageStorage` bucket for scroll restoration across breakpoint
+  /// crossings and history changes (one bucket per router).
+  /// 用于跨断点与历史变化恢复滚动偏移的共享 `PageStorage` 桶（每个 router 一个）。
+  final PageStorageBucket _pageStorageBucket = PageStorageBucket();
+
+  /// The restoration id of the route that last held primary focus, so focus can
+  /// return to it after a pop. / 上次持有主焦点的 route 的 restoration id，
+  /// 以便 pop 后焦点能回到它。
+  String? _focusedRestorationId;
+
+  /// Records the route that currently holds primary focus.
+  /// 记录当前持有主焦点的 route。
+  void _noteFocus(String id) => _focusedRestorationId = id;
 
   late final ZeroShell _shell;
 
@@ -397,6 +416,12 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   final List<List<_StackEntry>> _tabStacks = [];
   final List<_StackEntry> _overlayStack = [];
   final Map<int, GlobalKey<NavigatorState>> _navigatorKeys = {};
+
+  /// Per-nested-shell navigator keys, keyed by the host route's location, so a
+  /// nested shell keeps its own branch-navigator identity across rebuilds.
+  /// 每个嵌套 shell 的 navigator 键，以宿主路由的 location 为键，使嵌套 shell
+  /// 在重建间保持自身 branch-navigator 的身份。
+  final Map<String, GlobalKey<NavigatorState>> _nestedNavigatorKeys = {};
   final GlobalKey<NavigatorState> _rootNavigatorKey =
       GlobalKey<NavigatorState>();
 
@@ -950,11 +975,13 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   }
 
   /// Pop the top entry of the current stack. / pop 当前栈的栈顶条目。
-  void pop([Object? result]) {
-    if (_overlayStack.isNotEmpty) {
-      _popOverlay(result);
-      return;
-    }
+  /// Pops the top entry of the current tab. For an ordinary route this is a plain
+  /// (synchronous) truncation. When the new top is a bare shell host — which
+  /// renders nothing on its own — the parent location is re-resolved so the
+  /// nested default tab is re-derived. / 移除当前 tab 栈顶条目。普通路由走直接的
+  /// （同步）截断；若新的栈顶是纯 shell 宿主（自身不渲染内容），则重新解析父级
+  /// location 以重建其嵌套默认 tab。
+  void _popToParentOfCurrentTab([Object? result]) {
     final stack = _tabStacks[_currentTab];
     if (stack.length <= 1) {
       return;
@@ -963,8 +990,24 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     if (!removed.completer.isCompleted) {
       removed.completer.complete(result);
     }
-    _syncLocation();
-    notifyListeners();
+    final parent = stack.isEmpty ? '/' : stack.last.match.location;
+    final top = stack.isEmpty ? null : stack.last;
+    if (top != null && top.match.route.shell != null) {
+      // The new top is a bare shell host: re-resolve so its nested default shows.
+      // 新的栈顶为纯 shell 宿主：重新解析以显示其嵌套默认 tab。
+      unawaited(_navigateTo(parent, external: true, forceTab: _currentTab));
+    } else {
+      _syncLocation();
+      notifyListeners();
+    }
+  }
+
+  void pop([Object? result]) {
+    if (_overlayStack.isNotEmpty) {
+      _popOverlay(result);
+      return;
+    }
+    _popToParentOfCurrentTab(result);
   }
 
   void _popOverlay([Object? result]) {
@@ -1041,18 +1084,8 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     return false;
   }
 
-  void _popTopOfCurrentTab([Object? result]) {
-    final stack = _tabStacks[_currentTab];
-    if (stack.length <= 1) {
-      return;
-    }
-    final removed = stack.removeLast();
-    if (!removed.completer.isCompleted) {
-      removed.completer.complete(result);
-    }
-    _syncLocation();
-    notifyListeners();
-  }
+  void _popTopOfCurrentTab([Object? result]) =>
+      _popToParentOfCurrentTab(result);
 
   /// Pop within the layer that encloses [context] (dialog / sheet / page);
   /// other pages are unaffected.
@@ -1417,28 +1450,106 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     return _shell.builder(context, _shellState!, _buildShellChild(context));
   }
 
-  Widget _buildShellChild(BuildContext context) {
-    final stack = _tabStacks[_currentTab];
-    if (_widthClass == BreakpointClass.expanded) {
-      return _buildPanes(context, stack);
+  /// The prefix of [stack] the OUTER shell should render directly: everything
+  /// up to and including the first entry that hosts a nested shell. The nested
+  /// shell renders the remaining suffix itself via the host's `child`.
+  /// [stack] 中「外层 shell 应直接渲染」的前缀：从开头直到（含）首个承载嵌套
+  /// shell 的 entry。剩余后缀由嵌套 shell 通过宿主的 `child` 自行渲染。
+  List<_StackEntry> _outerRenderStack(List<_StackEntry> stack) {
+    for (var i = 0; i < stack.length; i++) {
+      if (stack[i].match.route.shell != null) {
+        return stack.sublist(0, i + 1);
+      }
     }
-    return _buildBranchNavigator(context, stack);
+    return stack;
   }
 
-  Widget _buildBranchNavigator(BuildContext context, List<_StackEntry> stack) {
-    return Navigator(
-      key: _navigatorKeyFor(_currentTab),
-      pages: <Page<Object?>>[for (final entry in stack) entry.page],
-      onDidRemovePage: _onDidRemovePage,
+  /// The suffix of [stack] belonging to the nested shell hosted by [entry].
+  /// [stack] 中属于由 [entry] 承载的嵌套 shell 的后缀。
+  List<_StackEntry> _nestedSubStack(
+    List<_StackEntry> stack,
+    _StackEntry entry,
+  ) {
+    final idx = stack.indexOf(entry);
+    return idx < 0 ? const <_StackEntry>[] : stack.sublist(idx + 1);
+  }
+
+  Widget _buildShellChild(BuildContext context) {
+    final stack = _tabStacks[_currentTab];
+    final renderStack = _outerRenderStack(stack);
+    if (_widthClass == BreakpointClass.expanded) {
+      return _buildPanesFor(
+        context,
+        _shell,
+        renderStack,
+        _currentTab,
+        stack,
+        _navigatorKeyFor(_currentTab),
+        allowPlaceholder: true,
+        onDismissDetail: hideDetail,
+      );
+    }
+    return _buildBranchNavigatorFor(
+      _shell,
+      renderStack,
+      _currentTab,
+      stack,
+      _navigatorKeyFor(_currentTab),
+      _onDidRemovePage,
     );
   }
 
-  Widget _buildPanes(BuildContext context, List<_StackEntry> stack) {
-    final visible = stack.length >= 2 ? stack.sublist(stack.length - 2) : stack;
+  /// Builds a branch `Navigator` for [shell] (compact / medium). [renderStack]
+  /// is the cut prefix of [fullStack] (a nested shell stops this shell's own
+  /// pages at its host, rendering the suffix itself). [onDidRemovePage] lets a
+  /// nested shell pop its own location instead of the outer one.
+  /// 为 [shell] 构建 branch `Navigator`（compact / medium）。[renderStack] 是
+  /// [fullStack] 被截断的前缀（嵌套 shell 会在其宿主处停下、自行渲染后缀）。
+  /// [onDidRemovePage] 让嵌套 shell 能 pop 自己的 location 而非外层。
+  Widget _buildBranchNavigatorFor(
+    ZeroShell shell,
+    List<_StackEntry> renderStack,
+    int currentTabIndex,
+    List<_StackEntry> fullStack,
+    GlobalKey<NavigatorState> navKey,
+    void Function(Page<Object?>) onDidRemovePage,
+  ) {
+    return Navigator(
+      key: navKey,
+      pages: <Page<Object?>>[for (final entry in renderStack) entry.page],
+      onDidRemovePage: onDidRemovePage,
+    );
+  }
+
+  /// Builds the two-column panes for [shell] (expanded). See the branch
+  /// navigator above for the render-stack / nested-shell conventions.
+  /// 为 [shell] 构建双列 panes（expanded）。render-stack 与嵌套 shell 约定同上。
+  Widget _buildPanesFor(
+    BuildContext context,
+    ZeroShell shell,
+    List<_StackEntry> renderStack,
+    int currentTabIndex,
+    List<_StackEntry> fullStack,
+    GlobalKey<NavigatorState> navKey, {
+    bool allowPlaceholder = true,
+    VoidCallback? onDismissDetail,
+  }) {
+    final visible = renderStack.length >= 2
+        ? renderStack.sublist(renderStack.length - 2)
+        : renderStack;
     final panes = <Widget>[];
     for (var i = 0; i < visible.length; i++) {
-      panes.add(_buildPane(context, visible[i], isMaster: i == 0));
+      panes.add(_buildPane(context, visible[i], fullStack, isMaster: i == 0));
     }
+    // A single visible pane shows a placeholder only when it is a genuine leaf
+    // (no selection yet). A shell host fills it with its own nested shell, and a
+    // nested shell always shows its own content even with one entry.
+    // 单个可见 pane 仅在确实是叶子（尚无选择）时才显示占位提示；shell 宿主会用
+    // 自身嵌套 shell 填满它，而嵌套 shell 即便只有一项也总是展示自己的内容。
+    final showPlaceholder =
+        visible.length == 1 &&
+        allowPlaceholder &&
+        visible.first.match.route.shell == null;
     final paneView = SlidingPanes(
       leftPaneFraction: _leftPaneFraction,
       maxLeftPaneWidth: maxLeftPaneWidth,
@@ -1452,8 +1563,8 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       // would mask the 1 ↔ 2 count that drives the expand / collapse
       // transition. / 空详情提示走独立参数：作为第二个 child 会掩盖驱动
       // 展开 / 收起转场的 1 ↔ 2 计数变化。
-      placeholder: visible.length == 1
-          ? _placeholderFor(context, _currentTab)
+      placeholder: showPlaceholder
+          ? _placeholderForShell(context, shell, currentTabIndex)
           : null,
       onLeftPaneFractionChanged: (fraction) {
         _leftPaneFraction = fraction;
@@ -1470,7 +1581,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       },
       // Swipe the detail pane left to dismiss it (expanded widths).
       // expanded 宽度下左滑 detail pane 即可收起。
-      onDismissDetail: hideDetail,
+      onDismissDetail: onDismissDetail,
       children: panes,
     );
     if (!showBreadcrumbs) {
@@ -1482,7 +1593,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
         // 为基于 InkWell 的面包屑提供 Material 祖先。
         Material(
           type: MaterialType.transparency,
-          child: _buildBreadcrumbs(context, stack),
+          child: _buildBreadcrumbs(context, fullStack),
         ),
         Expanded(child: paneView),
       ],
@@ -1496,20 +1607,29 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   /// 新实例）、master 替换（更深层级 push）与展开 / 收起——无键则跳过转场。
   Widget _buildPane(
     BuildContext context,
-    _StackEntry entry, {
+    _StackEntry entry,
+    List<_StackEntry> stack, {
     required bool isMaster,
   }) {
     return KeyedSubtree(
       key: ValueKey('pane:${entry.match.location}'),
-      child: _buildPaneContent(context, entry, isMaster),
+      child: _buildPaneContent(context, entry, isMaster, stack),
     );
   }
 
-  Widget _placeholderFor(BuildContext context, int tabIndex) {
-    return _tabs[tabIndex].placeholder ??
-        placeholder ??
-        _defaultPlaceholder(context);
-  }
+  /// Placeholder for an empty pane of [shell] at [tabIndex], preferring the
+  /// tab's placeholder, then the shell's, then a default icon.
+  /// [shell] 在 [tabIndex] 处空 pane 的占位内容：优先 tab 级、再 shell 级，
+  /// 最后为默认图标。
+  Widget _placeholderForShell(
+    BuildContext context,
+    ZeroShell shell,
+    int tabIndex,
+  ) =>
+      shell.tabs[tabIndex].placeholder ??
+      shell.placeholder ??
+      placeholder ??
+      _defaultPlaceholder(context);
 
   Widget _defaultPlaceholder(BuildContext context) {
     final theme = Theme.of(context);
@@ -1518,33 +1638,83 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     );
   }
 
+  /// Wraps [inner] with the scroll / focus restoration machinery. `PageStorage`
+  /// remembers scroll offsets keyed by [ZeroRouteState.restorationId]; the focus
+  /// restorer returns primary focus to the route that last held it after a pop.
+  /// 用滚动 / 焦点恢复机制包裹 [inner]。`PageStorage` 以
+  /// [ZeroRouteState.restorationId] 为键记住滚动偏移；焦点恢复器在 pop 后把主
+  /// 焦点还给上次持有它的 route。
+  Widget _wrapRestoration(ZeroRouteMatch match, Widget inner) {
+    if (restoreScrollOffset) {
+      inner = PageStorage(
+        bucket: _pageStorageBucket,
+        child: KeyedSubtree(
+          key: PageStorageKey<String>(match.state.restorationId),
+          child: inner,
+        ),
+      );
+    }
+    if (restoreFocus) {
+      inner = _FocusRestorer(
+        id: match.state.restorationId,
+        initialFocusedId: _focusedRestorationId,
+        onFocused: _noteFocus,
+        child: inner,
+      );
+    }
+    return inner;
+  }
+
+  /// Returns primary focus to the route that last held it after it remounts
+  /// (e.g. on a pop), so history navigation does not drop focus to the body.
+  /// 在某 route 重新挂载（如 pop 后）时把主焦点还给上次持有它的 route，
+  /// 使历史导航不会把焦点丢到 body。
   Widget _buildPaneContent(
     BuildContext context,
     _StackEntry entry,
     bool isMaster,
+    List<_StackEntry> stack,
   ) {
     final match = entry.match;
     final route = match.route;
-    // `pageKey` is the stable handoff key: when the window width crosses a
-    // breakpoint the page content (a route on compact / medium, a pane here)
-    // is rebuilt in a different subtree, and the keyed element moves in the
-    // same frame instead of being recreated — scroll offsets and text input
-    // survive. / `pageKey` 是稳定的交接键：窗口宽度跨越断点时页面内容
-    // （compact / medium 是 route，此处是 pane）会在不同子树中重建，带键的
-    // 元素于同帧移动而非重建——滚动偏移与文本输入得以保留。
-    Widget inner =
-        route.builder?.call(context, match.state) ?? const SizedBox.shrink();
-    if (route.loader != null) {
-      // Data-driven route: resolve before building, showing the loading / error
-      // widget meanwhile. / 数据驱动路由：构建前先解析，期间显示加载 / 错误态。
-      inner = _LoaderBridge(
-        route: route,
-        state: match.state,
-        errorBuilder: errorBuilder,
-        childBuilder: (context, state) =>
-            route.builder?.call(context, state) ?? const SizedBox.shrink(),
+    Widget inner;
+    if (route.shell != null) {
+      // A nested shell hosted by this route: build it recursively and pass it as
+      // the route builder's `child`. The nested shell owns its own tabs / panes
+      // over the suffix of [stack] after this entry.
+      // 本路由承载的嵌套 shell：递归构建并作为路由 builder 的 `child` 传入。
+      // 嵌套 shell 在「本 entry 之后的栈后缀」上拥有自己的 tabs / panes。
+      final child = _buildNestedShell(
+        context,
+        entry,
+        route.shell!,
+        _nestedSubStack(stack, entry),
       );
+      inner = route.shellBuilder?.call(context, match.state, child) ?? child;
+    } else {
+      // `pageKey` is the stable handoff key: when the window width crosses a
+      // breakpoint the page content (a route on compact / medium, a pane here)
+      // is rebuilt in a different subtree, and the keyed element moves in the
+      // same frame instead of being recreated — scroll offsets and text input
+      // survive. / `pageKey` 是稳定的交接键：窗口宽度跨越断点时页面内容
+      // （compact / medium 是 route，此处是 pane）会在不同子树中重建，带键的
+      // 元素于同帧移动而非重建——滚动偏移与文本输入得以保留。
+      inner =
+          route.builder?.call(context, match.state) ?? const SizedBox.shrink();
+      if (route.loader != null) {
+        // Data-driven route: resolve before building, showing the loading /
+        // error widget meanwhile. / 数据驱动路由：构建前先解析，期间显示加载 /
+        // 错误态。
+        inner = _LoaderBridge(
+          route: route,
+          state: match.state,
+          errorBuilder: errorBuilder,
+          childBuilder: (context, state) =>
+              route.builder?.call(context, state) ?? const SizedBox.shrink(),
+        );
+      }
     }
+    inner = _wrapRestoration(match, inner);
     final pane = ZeroRouteStateScope(
       key: match.state.pageKey,
       state: match.state,
@@ -1563,23 +1733,36 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     BuildContext context,
     _StackEntry entry, {
     required bool isBranchRoot,
+    required List<_StackEntry> stack,
   }) {
     final match = entry.match;
     final route = match.route;
-    // Keyed with the same `pageKey` the expanded pane uses, so the content
-    // subtree is handed over in the same frame when the width class changes.
-    // 与 expanded pane 使用同一个 `pageKey`，宽度档位变化时内容子树于同帧交接。
-    Widget inner =
-        route.builder?.call(context, match.state) ?? const SizedBox.shrink();
-    if (route.loader != null) {
-      inner = _LoaderBridge(
-        route: route,
-        state: match.state,
-        errorBuilder: errorBuilder,
-        childBuilder: (context, state) =>
-            route.builder?.call(context, state) ?? const SizedBox.shrink(),
+    Widget inner;
+    if (route.shell != null) {
+      final child = _buildNestedShell(
+        context,
+        entry,
+        route.shell!,
+        _nestedSubStack(stack, entry),
       );
+      inner = route.shellBuilder?.call(context, match.state, child) ?? child;
+    } else {
+      // Keyed with the same `pageKey` the expanded pane uses, so the content
+      // subtree is handed over in the same frame when the width class changes.
+      // 与 expanded pane 使用同一个 `pageKey`，宽度档位变化时内容子树于同帧交接。
+      inner =
+          route.builder?.call(context, match.state) ?? const SizedBox.shrink();
+      if (route.loader != null) {
+        inner = _LoaderBridge(
+          route: route,
+          state: match.state,
+          errorBuilder: errorBuilder,
+          childBuilder: (context, state) =>
+              route.builder?.call(context, state) ?? const SizedBox.shrink(),
+        );
+      }
     }
+    inner = _wrapRestoration(match, inner);
     final content = ZeroRouteStateScope(
       key: match.state.pageKey,
       state: match.state,
@@ -1598,6 +1781,137 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       context,
       Scaffold(body: content, bottomNavigationBar: bottomBar(context)),
     );
+  }
+
+  /// Returns the full tab / overlay stack that currently contains [entry] (every
+  /// match lives in the top-level tab stacks, including nested-shell entries).
+  /// 返回当前包含 [entry] 的完整 tab / 覆盖栈（每个匹配都位于顶层 tab 栈中，
+  /// 含嵌套 shell 的条目）。
+  List<_StackEntry> _stackContaining(_StackEntry entry) {
+    for (final stack in _tabStacks) {
+      if (stack.contains(entry)) {
+        return stack;
+      }
+    }
+    if (_overlayStack.contains(entry)) {
+      return _overlayStack;
+    }
+    return const <_StackEntry>[];
+  }
+
+  /// Stable navigator key for the nested shell hosted at [hostLocation].
+  /// 寄宿于 [hostLocation] 的嵌套 shell 的稳定 navigator 键。
+  GlobalKey<NavigatorState> _nestedNavigatorKeyFor(String hostLocation) =>
+      _nestedNavigatorKeys.putIfAbsent(
+        hostLocation,
+        () => GlobalKey<NavigatorState>(),
+      );
+
+  /// The tab index of [shell] whose route table owns the first entry of
+  /// [subStack]. Defaults to 0 when the sub-stack is empty.
+  /// [subStack] 首个 entry 所属 [shell] 的 tab 下标；sub-stack 为空时默认 0。
+  int _nestedTabIndex(ZeroShell shell, List<_StackEntry> subStack) {
+    if (subStack.isEmpty) {
+      return 0;
+    }
+    final rootRoute = subStack.first.match.route;
+    final index = shell.tabs.indexWhere((t) => t.routes.contains(rootRoute));
+    return index < 0 ? 0 : index;
+  }
+
+  /// Builds the recursive nested-shell widget for [shell], hosted by [hostEntry].
+  /// [subStack] is the suffix of the outer stack that belongs to this shell.
+  /// 为寄宿于 [hostEntry] 的 [shell] 递归构建嵌套 shell 组件。[subStack] 为外层
+  /// 栈中属于本 shell 的后缀。
+  Widget _buildNestedShell(
+    BuildContext context,
+    _StackEntry hostEntry,
+    ZeroShell shell,
+    List<_StackEntry> subStack,
+  ) {
+    final tabIndex = subStack.isEmpty ? 0 : _nestedTabIndex(shell, subStack);
+    final hostLocation = hostEntry.match.location;
+    // `goTab` writes a new location — the delegate re-resolves the whole (flat)
+    // stack and re-renders every shell level, so a nested shell needs no private
+    // state machine. / `goTab` 写入新的 location：delegate 重新解析整条（扁平）
+    // 栈并渲染每一层 shell，因此嵌套 shell 无需私有状态机。
+    void goTab(int index, {String? initialLocation}) {
+      final tab = shell.tabs[index];
+      final target =
+          initialLocation ??
+          ZeroRouteMatcher.joinPattern(hostLocation, tab.routes.first.path);
+      unawaited(_navigateTo(target, external: true, forceTab: _currentTab));
+    }
+
+    final nestedState = ZeroShellState(
+      currentIndex: tabIndex,
+      isCompact: _widthClass == BreakpointClass.compact,
+      isMedium: _widthClass == BreakpointClass.medium,
+      isExpanded: _widthClass == BreakpointClass.expanded,
+      goTab: goTab,
+      leftPaneFraction: _leftPaneFraction,
+    );
+    final navKey = _nestedNavigatorKeyFor(hostLocation);
+    final renderStack = _outerRenderStack(subStack);
+    final child = _widthClass == BreakpointClass.expanded
+        ? _buildPanesFor(
+            context,
+            shell,
+            renderStack,
+            tabIndex,
+            subStack,
+            navKey,
+            allowPlaceholder: false,
+            onDismissDetail: () => _navigateToNestedParent(
+              hostEntry,
+              subStack,
+              subStack.length - 1,
+            ),
+          )
+        : _buildBranchNavigatorFor(
+            shell,
+            renderStack,
+            tabIndex,
+            subStack,
+            navKey,
+            (page) => _onNestedDidRemovePage(hostEntry, subStack, page),
+          );
+    return ZeroShellScope(
+      state: nestedState,
+      child: shell.builder(context, nestedState, child),
+    );
+  }
+
+  /// Navigates to the parent of the entry at [removedIndex] within [subStack],
+  /// falling back to the hosting route when it is the shell's root entry.
+  /// 跳转到 [subStack] 中 [removedIndex] 处条目的父级 location；若已是 shell 根
+  /// entry，则回到寄宿该 shell 的路由 location。
+  void _navigateToNestedParent(
+    _StackEntry hostEntry,
+    List<_StackEntry> subStack,
+    int removedIndex,
+  ) {
+    final target = removedIndex <= 0
+        ? hostEntry.match.location
+        : subStack[removedIndex - 1].match.location;
+    unawaited(_navigateTo(target, external: true, forceTab: _currentTab));
+  }
+
+  /// `onDidRemovePage` for a nested branch navigator: pops the removed page by
+  /// navigating to its parent location.
+  /// 嵌套 branch navigator 的 `onDidRemovePage`：通过跳转到被移除页面的父级
+  /// location 来 pop。
+  void _onNestedDidRemovePage(
+    _StackEntry hostEntry,
+    List<_StackEntry> subStack,
+    Page<Object?> page,
+  ) {
+    for (var i = subStack.length - 1; i >= 0; i--) {
+      if (identical(subStack[i].page, page)) {
+        _navigateToNestedParent(hostEntry, subStack, i);
+        return;
+      }
+    }
   }
 
   /// Wraps [content] with the breadcrumb bar on compact / medium when
@@ -1788,6 +2102,73 @@ class _LoaderBridgeState extends State<_LoaderBridge> {
       key: updated.pageKey,
       state: updated,
       child: widget.childBuilder(context, updated),
+    );
+  }
+}
+
+/// Returns primary focus to the route that last held it after it remounts (e.g.
+/// on a pop), so browser-history navigation does not drop focus to the body.
+/// 在某 route 重新挂载（如 pop 后）时把主焦点还给上次持有它的 route，
+/// 使浏览器历史导航不会把焦点丢到 body。
+class _FocusRestorer extends StatefulWidget {
+  /// Create the restorer. / 创建恢复器。
+  const _FocusRestorer({
+    required this.id,
+    required this.initialFocusedId,
+    required this.onFocused,
+    required this.child,
+  });
+
+  /// The route's restoration id. / 该 route 的 restoration id。
+  final String id;
+
+  /// The id of the route that held focus before this navigation, or `null`.
+  /// 本次导航前持有焦点的 route 的 id，或 `null`。
+  final String? initialFocusedId;
+
+  /// Called when this subtree gains primary focus. / 该子树获得主焦点时调用。
+  final ValueChanged<String> onFocused;
+
+  /// The wrapped content. / 被包裹的内容。
+  final Widget child;
+
+  @override
+  State<_FocusRestorer> createState() => _FocusRestorerState();
+}
+
+class _FocusRestorerState extends State<_FocusRestorer> {
+  final FocusNode _node = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // If this was the focused route, reclaim focus once the tree is laid out.
+    // 若本 route 曾是焦点所在，布局完成后重新夺回焦点。
+    if (widget.id == widget.initialFocusedId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _node.requestFocus();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: _node,
+      onFocusChange: (focused) {
+        if (focused) {
+          widget.onFocused(widget.id);
+        }
+      },
+      child: widget.child,
     );
   }
 }

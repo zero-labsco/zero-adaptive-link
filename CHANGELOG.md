@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0
+
+### Added / 新增
+
+- Nested `ZeroShell`: a `ZeroRoute` can now host a `ZeroShell` via `ZeroRoute.shell`; its `shellBuilder` receives the nested shell widget as its `child`. Route tables nest arbitrarily deep, and each shell derives its active tab and renders its own tabs / panes from the same flat location stack — so a deep link like `#/settings/profile` restores both the outer tab and the nested one. The delegate re-resolves the whole (flat) match stack on every navigation, so a nested shell needs no private state machine.
+  - 嵌套 `ZeroShell`：现在 `ZeroRoute` 可通过 `ZeroRoute.shell` 承载一个 `ZeroShell`，其 `shellBuilder` 会以嵌套 shell 组件作为 `child` 收到。路由表可任意深度嵌套，每个 shell 都从同一份（扁平）location 栈推导出自己的活动 tab 并渲染自身的 tabs / panes——因此 `#/settings/profile` 这样的深链会同时恢复外层与内层 tab。delegate 在每次导航时重新解析整条（扁平）匹配栈，嵌套 shell 因而无需私有状态机。
+- Real web anchors: `ZeroLink` (and the new `ZeroAnchor`) can render a genuine DOM `<a href="#/...">` on web via `dart:js_interop`, so right-click "open in new tab" and link previews work; clicks are still routed through the router (no full reload). `ZeroRouter.canonicalHref(location)` returns the shareable hash URL.
+  - 真实 web 锚点：`ZeroLink`（以及新增的 `ZeroAnchor`）在 web 上可通过 `dart:js_interop` 渲染真正的 DOM `<a href="#/...">`，使右键"在新标签打开"与链接预览可用；点击仍走路由（不会整页刷新）。`ZeroRouter.canonicalHref(location)` 返回可分享的 hash URL。
+- Scroll & focus restoration: `ZeroRouter` enables `PageStorage`-based scroll restoration (one bucket per router) and restores primary focus across breakpoint crossings and browser history changes. Route content is keyed so it survives the handoff; opt out with `restoreScrollOffset: false` / `restoreFocus: false`.
+  - 滚动与焦点恢复：`ZeroRouter` 启用基于 `PageStorage` 的滚动恢复（每个 router 一个桶），并在跨断点切换与浏览器历史变化时恢复主焦点。路由内容以键标记以在交接中存活；可用 `restoreScrollOffset: false` / `restoreFocus: false` 关闭。
+
 ## 0.4.0
 
 ### Fixed / 修复
