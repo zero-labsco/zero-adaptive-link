@@ -558,46 +558,22 @@ Widget buildYou(BuildContext context, ZeroRouteState state, bool loggedIn) {
         const DetailRow(label: 'Plan', value: 'Business'),
         const DetailRow(label: 'Member since', value: 'Mar 2022'),
         const Divider(height: 1),
-        ZeroLink(
-          location: '/you/billing',
-          child: const _NavRow(
-            title: 'Billing',
-            subtitle: 'Invoices and payment method',
+        // A real web <a href="#/you/billing">: right-click opens it in a new tab
+        // and the browser previews the target. On non-web it falls back to a
+        // ZeroLink, so the example still navigates everywhere.
+        // 真实 web 锚点：右键可在新标签打开、浏览器可预览目标。非 web 平台自动
+        // 回退为 ZeroLink，因此示例在各平台都能正常导航。
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: ZeroAnchor(
+            location: '/you/billing',
+            label: 'Billing · Invoices and payment method',
           ),
         ),
         const Divider(height: 1),
       ],
     ),
   );
-}
-
-class _NavRow extends StatelessWidget {
-  const _NavRow({required this.title, required this.subtitle});
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: kSubjectStyle),
-                const SizedBox(height: 3),
-                Text(subtitle, style: kCaptionStyle),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
-        ],
-      ),
-    );
-  }
 }
 
 /// The protected billing page (redirects to /login when signed out).
@@ -676,12 +652,28 @@ Widget buildProfile(BuildContext context, ZeroRouteState state) {
     backgroundColor: AppColors.paper,
     appBar: AppBar(title: const Text('Profile'), bottom: const AppBarRule()),
     body: ListView(
-      children: const [
-        DetailRow(label: 'Name', value: 'Avery Quinn'),
-        DetailRow(label: 'Role', value: 'Support lead'),
-        DetailRow(label: 'Locale', value: 'en-US'),
-        DetailRow(label: 'Time zone', value: 'UTC−05:00'),
-        DetailRow(label: 'Status', value: 'Active'),
+      children: [
+        const DetailRow(label: 'Name', value: 'Avery Quinn'),
+        const DetailRow(label: 'Role', value: 'Support lead'),
+        const DetailRow(label: 'Locale', value: 'en-US'),
+        const DetailRow(label: 'Time zone', value: 'UTC−05:00'),
+        const DetailRow(label: 'Status', value: 'Active'),
+        const Divider(height: 1),
+        // `canonicalHref` returns the shareable hash URL for any location —
+        // here the nested deep link lands on this very tab.
+        // `canonicalHref` 返回任意 location 的可分享 hash URL——此处这条嵌套深链
+        // 正好落在本 tab 上。
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: Text('Shareable link', style: kCaptionStyle),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: SelectableText(
+            ZeroRouter.canonicalHref(state.location),
+            style: kSubjectStyle.copyWith(color: AppColors.pine),
+          ),
+        ),
       ],
     ),
   );
