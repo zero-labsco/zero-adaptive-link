@@ -11,6 +11,11 @@
 - Scroll & focus restoration: `ZeroRouter` enables `PageStorage`-based scroll restoration (one bucket per router) and restores primary focus across breakpoint crossings and browser history changes. Route content is keyed so it survives the handoff; opt out with `restoreScrollOffset: false` / `restoreFocus: false`.
   - 滚动与焦点恢复：`ZeroRouter` 启用基于 `PageStorage` 的滚动恢复（每个 router 一个桶），并在跨断点切换与浏览器历史变化时恢复主焦点。路由内容以键标记以在交接中存活；可用 `restoreScrollOffset: false` / `restoreFocus: false` 关闭。
 
+### Fixed / 修复
+
+- Descending into a nested shell's default tab now strips the host prefix from that tab's `initialLocation`. A nested tab's `initialLocation` is a full location (`/settings/profile`) while its routes are authored relative to the host (`/profile`), so the host's own segments used to leak into the child pattern: the default tab never matched, the tab's stack stayed empty, and tapping such a tab fell back to the root location with an empty pane tree.
+  - 下钻嵌套 shell 的默认 tab 时，现在会先从该 tab 的 `initialLocation` 剥掉宿主前缀。嵌套 tab 的 `initialLocation` 是完整 location（`/settings/profile`），而其路由相对宿主书写（`/profile`），此前宿主的段会混进子级 pattern：默认 tab 始终匹配不上、该 tab 的栈为空，点击该 tab 会回落到根 location 并渲染空的 pane 树。
+
 ## 0.4.0
 
 ### Fixed / 修复

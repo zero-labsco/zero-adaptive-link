@@ -46,11 +46,14 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 - **master-detail pane 语义** —— detail pane 从 `paneSide` 指定的一侧滑入（默认向右、master 在左；设为向左则镜像：master 在右、detail 从左滑入）；分割线可拖拽调整两列比例；三列及以上刻意不做。
 - **pane 转场动画** —— detail pane 首次展开时滑入；更深层级 push 时视口整体左移一列（被替换的 master 退出、新的一对滑入）；pop 时反向移回。
 - **宽度变化状态不丢** —— 窗口跨越断点时，页面与 expanded pane 于同帧交接同一子树，滚动偏移与文本输入不会重置；稳定键以 `ZeroRouteState.pageKey` 暴露。
+- **滚动与焦点恢复** —— 基于 `PageStorage`、以 `ZeroRouteState.restorationId` 为键的滚动恢复，以及跨断点与浏览器历史变化的焦点恢复；可用 `restoreScrollOffset` / `restoreFocus` 关闭。
 - **向左或向右展开** —— 通过 `paneSide` 选择 `SlidingPanesSide.right`（master 在左）或 `SlidingPanesSide.left`（master 在右）；用 `paneSideListenable` 可在运行时切换展开方向而无需重建路由。
 - **带上限的 pane 尺寸** —— 用 `leftPaneFraction` 设置初始分栏比例，用 `maxLeftPaneWidth` 让 master pane 仍随窗口缩放但在超宽屏停在合理宽度（剩余空间由 detail 吸收，拖拽同样受上限约束）。
 - **幂等聚焦** —— 点击已可见的 pane 时聚焦它，而不是堆叠重复 pane。
 - **URL 可寻址、可深链** —— 每个页面都入表，URL 才能表达它；Web 默认 hash 策略（`/#/products/42`），浏览器返回、刷新、深链与应用内导航走同一条 location 管道（GitHub Pages 无需 404 fallback）。
+- **真实 web 锚点** —— `ZeroAnchor` 在 web 上（通过 `dart:js_interop`）渲染真正的 DOM `<a href>`，「在新标签中打开」与链接预览都能用，而点击仍走插件路由；`ZeroRouter.canonicalHref(location)` 返回可分享的 hash URL。
 - **声明式路由表** —— 嵌套路由、`:param` 片段、路由名称、标题、路由表级与路由级重定向、`onExit` 钩子、`fullscreen` / `fullscreenDialog` 覆盖层、自定义转场与 `errorBuilder`。
+- **嵌套 shell** —— `ZeroRoute` 可通过 `shell` + `shellBuilder` 承载自己的 `ZeroShell`，让某个 branch 拥有第二层 tabs / panes；路由表可任意深度嵌套，`#/settings/profile` 这样的深链会逐层恢复。
 - **与 Navigator 同形的导航动词** —— `pushNamed` / `pop` / `maybePop` / `popUntil` / `canPop` 等与 `NavigatorState` 同名同签名，迁移零成本。
 - **行为正确的 compact chrome** —— 底部 `NavigationBar` 渲染进 branch 页面内部，`useRootNavigator: false` 打开的 bottom sheet 可覆盖它；系统返回键先关闭 sheet。
 - **零运行时依赖** —— 纯 Dart，无 platform channel、无原生代码；仅用 `ValueNotifier` / `InheritedWidget`。
@@ -206,6 +209,22 @@ SlidingPanes(
 
 ## API 参考
 
+### ZeroRouter
+
+| 参数 | 类型 | 说明 |
+|-----------|------|-------------|
+| `initialLocation` | `String` | 首帧解析的 location |
+| `redirect` / `redirectLimit` | `ZeroRouterRedirect?` / `int` | 路由表级重定向及其跳转上限 |
+| `errorBuilder` | `ZeroErrorBuilder?` | 无路由匹配时的渲染内容 |
+| `paneSide` / `paneSideListenable` | `SlidingPanesSide` / `ValueListenable<SlidingPanesSide>?` | detail pane 从哪一侧展开，可选实时驱动 |
+| `leftPaneFraction` / `maxLeftPaneWidth` | `double` / `double?` | 初始分栏比例与 master pane 的像素上限 |
+| `slideDuration` / `slideCurve` | `Duration` / `Curve` | pane 转场时长与曲线 |
+| `showBreadcrumbs` / `breadcrumbsBuilder` | `bool` / `ZeroBreadcrumbsBuilder?` | expanded 宽度下的面包屑条 |
+| `onNavigation` | `void Function(String location)?` | 每次 location 成功变化后触发 |
+| `restoreScrollOffset` | `bool` | 基于 `PageStorage` 的滚动恢复（默认 `true`） |
+| `restoreFocus` | `bool` | 跨断点 / 历史变化时恢复主焦点（默认 `true`） |
+| `canonicalHref(location)` | `static String` | 某 location 的可分享 hash URL（`#/products/42`） |
+
 ### ZeroLink
 
 | 参数 | 类型 | 说明 |
@@ -241,6 +260,18 @@ SlidingPanes(
 | `opaque` / `barrierColor` / `barrierDismissible` | — | 模态路由属性 |
 | `transitionsBuilder` | `RouteTransitionsBuilder?` | 自定义页面转场 |
 | `routes` | `List<ZeroRoute>` | 嵌套路由 |
+| `shell` | `ZeroShell?` | 在本路由内承载嵌套 shell |
+| `shellBuilder` | `Widget Function(BuildContext, ZeroRouteState, Widget)?` | 承载 `shell` 的路由的 builder；`child` 为嵌套 shell（与 `builder` 互斥） |
+
+### ZeroAnchor
+
+| 参数 | 类型 | 说明 |
+|-----------|------|-------------|
+| `location` | `String` | 目标 location（href 中渲染为 `#location`） |
+| `label` | `String` | 锚点文字 |
+| `mode` | `ZeroLinkMode` | 为与 `ZeroLink` 保持 API 一致而保留；锚点始终使用链接语义 |
+
+在 web 上渲染真正的 DOM `<a href>`，支持「在新标签中打开」与链接预览；非 web 平台自动回退为 `ZeroLink`。
 
 ### Breakpoints
 

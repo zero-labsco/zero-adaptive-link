@@ -25,9 +25,34 @@ ZeroRouter(
 )
 ```
 
-One `ZeroShell` is supported in v0.1.0 (no nested shells).
+## Nested shells / 嵌套 shell
 
-v0.1.0 仅支持一个 `ZeroShell`（不支持嵌套 shell）。
+A `ZeroRoute` can host another `ZeroShell` via `shell`; its `shellBuilder` receives the nested shell widget as `child` (return it as-is to render the nested shell unchanged). Route tables therefore nest arbitrarily deep: each shell derives its own active tab and renders its own tabs / panes from the same flat location stack, so a deep link such as `#/settings/profile` restores both the outer and the nested tab.
+
+`ZeroRoute` 可通过 `shell` 承载另一个 `ZeroShell`，其 `shellBuilder` 会以嵌套 shell 组件作为 `child` 收到（原样返回即渲染该嵌套 shell）。因此路由表可任意深度嵌套：每个 shell 都从同一份扁平 location 栈推导自己的活动 tab 并渲染自身的 tabs / panes，`#/settings/profile` 这样的深链会同时恢复外层与内层 tab。
+
+```dart
+ZeroRoute(
+  path: '/settings',
+  shell: ZeroShell(
+    builder: (context, shell, child) => /* inner rail / bar + child */,
+    tabs: [
+      ZeroTab(initialLocation: '/settings/profile', routes: [ /* … */ ]),
+      ZeroTab(initialLocation: '/settings/account', routes: [ /* … */ ]),
+    ],
+  ),
+  // `child` is the nested shell; return it as-is to render it unchanged.
+  // `child` 即嵌套 shell；原样返回即渲染它。
+  shellBuilder: (context, state, child) => child,
+)
+```
+
+Two conventions to keep in mind / 需要留意的两点约定:
+
+- A hosted route uses `shellBuilder` **instead of** `builder` — the two are mutually exclusive.
+  被承载的路由使用 `shellBuilder` **而非** `builder`，二者互斥。
+- A nested tab's `initialLocation` is a **full** location (`/settings/profile`), while its route paths are authored relative to the host (`/profile`).
+  嵌套 tab 的 `initialLocation` 是**完整** location（`/settings/profile`），而其路由路径相对宿主书写（`/profile`）。
 
 ## `ZeroRoute` parameters / `ZeroRoute` 参数
 
@@ -47,6 +72,8 @@ v0.1.0 仅支持一个 `ZeroShell`（不支持嵌套 shell）。
 | `barrierDismissible` | `bool` | Tap the barrier to dismiss / 点击屏障关闭 |
 | `transitionsBuilder` | `RouteTransitionsBuilder?` | Custom transitions / 自定义转场 |
 | `routes` | `List<ZeroRoute>` | Nested routes / 嵌套路由 |
+| `shell` | `ZeroShell?` | Host a nested shell inside this route / 在本路由内承载嵌套 shell |
+| `shellBuilder` | `Widget Function(BuildContext, ZeroRouteState, Widget)?` | Builder for a route that hosts [shell]; `child` is the nested shell / 承载 [shell] 的路由的 builder；`child` 为嵌套 shell |
 
 ## Matching rules / 匹配规则
 
