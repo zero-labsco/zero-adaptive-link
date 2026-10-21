@@ -53,4 +53,7 @@ export 'src/router/state.dart'
         ZeroShellScope,
         ZeroShellState;
 export 'src/shell/shell.dart' show ZeroShellChrome;
-export 'src/widgets/zero_link.dart' show ZeroLink;
+export 'src/widgets/zero_back_button.dart' show ZeroBackButton;
+export 'src/widgets/zero_link.dart' show ZeroLink, ZeroLinkMode;
+export 'src/widgets/zero_navigation_chrome.dart'
+    show ZeroNavigationChrome, ZeroNavigationDestination;

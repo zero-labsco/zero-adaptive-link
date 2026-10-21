@@ -22,7 +22,28 @@ class ZeroRouteState {
     this.pathParameters = const <String, String>{},
     this.queryParameters = const <String, String>{},
     this.arguments,
+    this.data,
   }) : pageKey = GlobalKey(debugLabel: 'ZeroRoutePage:$location');
+
+  /// Data resolved by a route's `loader`, or `null` before it resolves / when
+  /// the route has no loader. Page builders read it to avoid their own
+  /// `FutureBuilder`. / 由路由 `loader` 解析得到的数据；loader 未解析或路由
+  /// 无 loader 时为 `null`。页面 builder 读取它即可省去自己的 `FutureBuilder`。
+  final Object? data;
+
+  /// Returns a copy with [data] replaced (the handoff [pageKey] is preserved so
+  /// the breakpoint handoff still works after the loader resolves).
+  /// 返回把 [data] 替换后的副本（交接用 [pageKey] 保持不变，loader 解析后
+  /// 跨断点交接仍正常工作）。
+  ZeroRouteState copyWith({Object? data}) => ZeroRouteState(
+    fullPath: fullPath,
+    location: location,
+    route: route,
+    pathParameters: pathParameters,
+    queryParameters: queryParameters,
+    arguments: arguments,
+    data: data,
+  );
 
   /// The full route pattern that matched (e.g. `/products/:id`).
   /// 匹配到的完整路由 pattern（例如 `/products/:id`）。

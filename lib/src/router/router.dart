@@ -65,6 +65,8 @@ class ZeroRoute {
     this.barrierColor,
     this.barrierDismissible = false,
     this.transitionsBuilder,
+    this.loader,
+    this.loadingBuilder,
     this.routes = const <ZeroRoute>[],
   });
 
@@ -112,6 +114,20 @@ class ZeroRoute {
 
   /// Custom page transitions. / 自定义页面转场。
   final RouteTransitionsBuilder? transitionsBuilder;
+
+  /// Optional data loader: resolves route data before the page builds. While it
+  /// is pending the pane / page shows [loadingBuilder] (default spinner); on
+  /// error it shows the router's [ZeroErrorBuilder]. This lets the adaptive
+  /// layer own the data round-trip instead of every page wiring its own
+  /// `FutureBuilder`. / 可选数据加载器：在页面构建前解析路由数据。等待期间
+  /// pane / 页面显示 [loadingBuilder]（默认 spinner），出错时显示路由的
+  /// [ZeroErrorBuilder]。自适应层由此包办数据往返，无需每个页面各自接
+  /// `FutureBuilder`。
+  final FutureOr<dynamic> Function(ZeroRouteState state)? loader;
+
+  /// Shown while [loader] is pending (defaults to a centered spinner).
+  /// [loader] 等待期间显示的内容（默认居中 spinner）。
+  final ZeroRouteBuilder? loadingBuilder;
 
   /// Nested routes, matched relative to this route's path.
   /// 嵌套路由，相对该路由路径匹配。
@@ -208,6 +224,8 @@ class ZeroRouter extends RouterConfig<String> {
     this.showBreadcrumbs = true,
     this.escapePops = true,
     this.breadcrumbsBuilder,
+    this.showBreadcrumbsOnBranch = false,
+    this.onNavigation,
     RouteInformationProvider? routeInformationProvider,
     RouteInformationParser<String>? routeInformationParser,
   }) : _providedRouteInformationProvider = routeInformationProvider,
@@ -233,6 +251,8 @@ class ZeroRouter extends RouterConfig<String> {
            showBreadcrumbs: showBreadcrumbs,
            escapePops: escapePops,
            breadcrumbsBuilder: breadcrumbsBuilder,
+           showBreadcrumbsOnBranch: showBreadcrumbsOnBranch,
+           onNavigation: onNavigation,
          ),
          backButtonDispatcher: RootBackButtonDispatcher(),
        );
@@ -344,6 +364,19 @@ class ZeroRouter extends RouterConfig<String> {
 
   /// Custom breadcrumb bar. / 自定义面包屑栏。
   final ZeroBreadcrumbsBuilder? breadcrumbsBuilder;
+
+  /// Render the breadcrumb bar inside the compact / medium branch `AppBar` too
+  /// (default `false`, where breadcrumbs only show on expanded).
+  /// 也在 compact / medium 的 branch `AppBar` 内渲染面包屑栏（默认 `false`，
+  /// 即面包屑仅在 expanded 显示）。
+  final bool showBreadcrumbsOnBranch;
+
+  /// Fired after every successful location change (in-app navigation, browser
+  /// back / forward, deep links) for analytics and side effects. `null` disables
+  /// it. Zero runtime dependency. / 每次成功的 location 变化（应用内导航、
+  /// 浏览器前进后退、深链）后触发，便于埋点与副作用。`null` 表示关闭。零
+  /// 运行时依赖。
+  final void Function(String location)? onNavigation;
 }
 
 /// Renders the error page for an unmatched location.

@@ -17,7 +17,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 Upgrade recommended:** `0.3.1` fixes `ZeroNav.popFrom(context)` blanking the app on expanded widths — a pane context resolves to the root navigator there, and the old guard popped the shell route instead of collapsing the detail pane. `popFrom` now mirrors `maybePop` / `maybePopFrom`: framework routes and overlay pages dismiss first, and the declarative tab pop applies only when there is nothing imperative to pop. All users are encouraged to upgrade to the latest version (`^0.3.1`).
+> **🔔 Upgrade recommended:** `0.4.0` makes `ZeroLink` keyboard- and screen-reader-accessible, adds `ZeroRouter.onNavigation` for analytics, `ZeroNav.showDetail` / `hideDetail` / `ZeroBackButton` for programmatic master-detail, a `ZeroRoute.loader` for data-driven routes, swipe-to-dismiss for the detail pane, a responsive `ZeroNavigationChrome`, breadcrumbs on compact / medium, and explicit `preferredTab` / `ZeroLink.tabIndex` control. It also fixes `popFrom` blanking the app on expanded widths. All users are encouraged to upgrade to the latest version (`^0.4.0`).
 
 🌐 **[Official Website](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[View on pub.dev](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[View on GitHub](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -72,7 +72,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.3.1
+  zero_adaptive_link: ^0.4.0
 ```
 
 ### GitHub
@@ -82,7 +82,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.3.1   # replace 0.3.1 with the version you need
+      ref: release/v0.4.0   # replace 0.4.0 with the version you need
 ```
 
 ---

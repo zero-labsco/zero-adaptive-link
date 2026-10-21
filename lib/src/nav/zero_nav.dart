@@ -80,14 +80,35 @@ class ZeroNav {
 
   /// Open a location with the adaptive behavior for the current width.
   /// 按当前宽度的自适应行为打开一个 location。
-  Future<Object?> open(String location, {Object? arguments}) {
-    return _delegate.pushNamed(location, arguments: arguments);
+  ///
+  /// [preferredTab] opens the location in a specific tab when it matches more
+  /// than one (see [ZeroLink.tabIndex]).
+  /// [preferredTab] 在 location 命中多个 tab 时打开指定 tab（对应
+  /// [ZeroLink.tabIndex]）。
+  Future<Object?> open(
+    String location, {
+    Object? arguments,
+    int? preferredTab,
+  }) {
+    return _delegate.pushNamed(
+      location,
+      arguments: arguments,
+      preferredTab: preferredTab,
+    );
   }
 
   /// Push a location; the returned future is completed by `pop(result)`.
   /// push 一个 location；返回的 Future 由 `pop(result)` 完成。
-  Future<Object?> pushNamed(String location, {Object? arguments}) {
-    return _delegate.pushNamed(location, arguments: arguments);
+  Future<Object?> pushNamed(
+    String location, {
+    Object? arguments,
+    int? preferredTab,
+  }) {
+    return _delegate.pushNamed(
+      location,
+      arguments: arguments,
+      preferredTab: preferredTab,
+    );
   }
 
   /// Replace the top entry with a location. / 用 location 替换栈顶条目。
@@ -95,11 +116,13 @@ class ZeroNav {
     String location, {
     Object? result,
     Object? arguments,
+    int? preferredTab,
   }) {
     return _delegate.pushReplacementNamed(
       location,
       result: result,
       arguments: arguments,
+      preferredTab: preferredTab,
     );
   }
 
@@ -123,11 +146,13 @@ class ZeroNav {
     String location, {
     Object? result,
     Object? arguments,
+    int? preferredTab,
   }) {
     return _delegate.popAndPushNamed(
       location,
       result: result,
       arguments: arguments,
+      preferredTab: preferredTab,
     );
   }
 
@@ -170,4 +195,21 @@ class ZeroNav {
   /// Re-run redirects for the current location (e.g. after an auth change).
   /// 对当前 location 重跑重定向（例如登录态变化后）。
   Future<void> refresh() => _delegate.refresh();
+
+  /// Open a location in the right pane programmatically (the imperative twin of
+  /// a `ZeroLink` tap). On expanded it expands / updates the detail pane; on
+  /// compact / medium it pushes a page.
+  /// 命令式地打开右栏中的某 location（`ZeroLink` 点击的命令式孪生）。expanded
+  /// 下展开 / 更新 detail pane；compact / medium 下 push 页面。
+  Future<Object?> showDetail(String location, {Object? arguments}) =>
+      _delegate.showDetail(location, arguments: arguments);
+
+  /// Collapse the detail pane, or pop the top branch entry — the inverse of
+  /// [showDetail]. / 收起 detail pane，或 pop 栈顶 branch 条目——[showDetail]
+  /// 的逆操作。
+  void hideDetail() => _delegate.hideDetail();
+
+  /// Whether the detail pane is currently open (expanded widths only).
+  /// detail pane 当前是否展开（仅 expanded 宽度）。
+  bool get isDetailOpen => _delegate.isDetailOpen;
 }

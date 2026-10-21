@@ -1,11 +1,39 @@
 # Changelog
 
-## 0.3.1
+## 0.4.0
 
 ### Fixed / 修复
 
 - Fixed `ZeroNav.popFrom(context)` blanking the app on expanded widths: a pane context resolves to the root navigator (no branch navigator is mounted there), and the old `nav.canPop()` guard was always true for the single shell route, so `nav.pop()` removed the shell route instead of collapsing the detail pane. The root branch now mirrors `maybePopFrom` — framework routes and overlay pages dismiss first, and the declarative tab pop applies only when the root navigator has nothing imperative to pop.
   - 修复 `ZeroNav.popFrom(context)` 在 expanded 宽度下让应用空白的问题：pane 上下文解析到 root navigator（此宽度未挂载 branch navigator），旧守卫 `nav.canPop()` 对唯一一条 shell route 永远为真，于是 `nav.pop()` 移除 shell route 而非收起 detail pane。root 分支现在与 `maybePopFrom` 一致——优先关闭框架级路由与 overlay 页，仅当 root navigator 没有可关闭的命令式路由时才走声明式 tab pop。
+
+### Changed / 优化
+
+- `ZeroLink` is now keyboard- and screen-reader-accessible: it uses `FocusableActionDetector` (focusable, Enter/Space activates) and exposes a `semanticLabel`, so it no longer needs a Material ancestor and reads as a link. The hand cursor is unchanged on web / desktop.
+  - `ZeroLink` 现在支持键盘与屏幕阅读器：改用 `FocusableActionDetector`（可聚焦、Enter/Space 激活）并暴露 `semanticLabel`，不再需要 Material 祖先，且被识别为链接。web / 桌面的手型光标保持不变。
+- The default error page now follows the surrounding `Theme` / `Directionality` (instead of hard-coded dark text on a fixed background) and is easier to read on both light and dark themes.
+  - 默认错误页现在遵循周围的 `Theme` / `Directionality`（不再是固定背景上的硬编码深色文字），在浅色与深色主题下都更易读。
+- The web hash provider now de-duplicates `popstate` + `hashchange` (some browsers fire both for one navigation) via a `Uri` equality guard, avoiding a spurious duplicate resolve.
+  - Web hash provider 现在对 `popstate` + `hashchange`（部分浏览器一次导航会同时触发两者）做去重（以 `Uri` 相等性守卫），避免多余的重复解析。
+- `ZeroLink` is now configurable like the imperative verbs: add `mode` (`push`, `replacement`, `popAndPush`, `fullscreen`) and `tabIndex` to open a location in a specific tab, or `fullscreen` to cover the shell. The `onTap` override still wins when provided.
+  - `ZeroLink` 现在可像命令式动词一样配置：新增 `mode`（`push`、`replacement`、`popAndPush`、`fullscreen`）与 `tabIndex`，可在指定 tab 打开某 location，或以 `fullscreen` 覆盖 shell。`onTap` 覆盖仍优先。
+
+### Added / 新增
+
+- Added `ZeroRouter.onNavigation`: a callback fired after every successful location change (in-app navigation, browser back / forward, deep links), for analytics and side effects, without a runtime dependency.
+  - 新增 `ZeroRouter.onNavigation`：每次成功的 location 变化（应用内导航、浏览器前进 / 后退、深链）后触发的回调，可用于埋点与副作用，零运行时依赖。
+- Added `ZeroNav.showDetail(location)` / `hideDetail()` / `isDetailOpen` so non-tap scenarios (keyboard shortcuts, initial URL, programmatic flows) can open and close the right pane directly, plus a `ZeroBackButton` widget that shows itself only when there is something to pop and adapts its behavior to the breakpoint (collapses the pane on expanded, pops the page otherwise).
+  - 新增 `ZeroNav.showDetail(location)` / `hideDetail()` / `isDetailOpen`，使非点击场景（键盘快捷键、初始 URL、命令式流程）也能直接开合右栏；并新增 `ZeroBackButton` 组件，仅在可 pop 时显示，并随断点自适应（expanded 收起 pane，否则 pop 页面）。
+- Added `ZeroRoute.loader`: an optional `Future` that resolves route arguments before the page builds. While pending the pane / page shows `loadingBuilder` (default spinner); on error it shows `errorBuilder`. This lets the adaptive layer own the data round-trip instead of every page wiring its own `FutureBuilder`.
+  - 新增 `ZeroRoute.loader`：在页面构建前解析路由参数的可选 `Future`。等待期间 pane / 页面显示 `loadingBuilder`（默认 spinner），出错时显示 `errorBuilder`。自适应层由此包办数据往返，无需每个页面各自接 `FutureBuilder`。
+- Added swipe-to-dismiss for the detail pane on expanded widths: a left-to-right swipe on the detail pane collapses it (mirroring iOS split-view dismissal), in addition to the existing resize-handle drag.
+  - expanded 宽度下新增右栏滑动收起：在 detail pane 上左滑即可收起（与 iOS split view 一致），原有拖拽分割线改比例仍保留。
+- Added `showBreadcrumbsOnBranch` to `ZeroRouter` (default `false`): when `true`, the breadcrumb bar also renders inside the compact / medium branch `AppBar`, so the three widths stay consistent instead of only showing breadcrumbs on expanded.
+  - 新增 `ZeroRouter.showBreadcrumbsOnBranch`（默认 `false`）：为 true 时面包屑栏也会渲染进 compact / medium 的 branch `AppBar`，使三档宽度表现一致，而非仅在 expanded 显示。
+- Added `ZeroNavigationChrome`, a responsive shell chrome that switches between a `NavigationRail` (expanded) and a bottom `NavigationBar` (compact / medium) automatically from the window width, so applications no longer have to hand-wire the two themselves.
+  - 新增 `ZeroNavigationChrome`：根据窗口宽度在 `NavigationRail`（expanded）与底部 `NavigationBar`（compact / medium）之间自动切换的响应式 shell chrome，应用无需再手写两种。
+- Added `preferredTab` to `ZeroNav.pushNamed` / `pushReplacementNamed` (and the matching `ZeroLink.tabIndex`) so a location that exists in multiple tabs can be opened in an explicit tab instead of always falling back to tab 0.
+  - 新增 `ZeroNav.pushNamed` / `pushReplacementNamed` 的 `preferredTab`（以及对应的 `ZeroLink.tabIndex`），使同一 pattern 存在于多 tab 时可显式指定打开哪个 tab，而非总回退到 tab 0。
 
 ## 0.3.0
 

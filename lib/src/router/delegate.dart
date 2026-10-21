@@ -304,6 +304,8 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     required this.showBreadcrumbs,
     required this.escapePops,
     required this.breadcrumbsBuilder,
+    required this.showBreadcrumbsOnBranch,
+    required this.onNavigation,
   }) : _paneSide = paneSide,
        _leftPaneFraction = initialLeftPaneFraction {
     assert(routes.isNotEmpty, 'At least one ZeroShell is required.');
@@ -384,6 +386,8 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   final bool showBreadcrumbs;
   final bool escapePops;
   final ZeroBreadcrumbsBuilder? breadcrumbsBuilder;
+  final bool showBreadcrumbsOnBranch;
+  final void Function(String location)? onNavigation;
 
   late final ZeroShell _shell;
 
@@ -701,6 +705,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     if (_locationNotifier.value != _location) {
       _locationNotifier.value = _location;
     }
+    _fireOnNavigation();
     notifyListeners();
   }
 
@@ -759,6 +764,24 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     if (_locationNotifier.value != _location) {
       _locationNotifier.value = _location;
     }
+    _fireOnNavigation();
+  }
+
+  /// Fires [onNavigation] once per distinct location, after the location has
+  /// settled (in-app navigation, browser back / forward, deep links, pops).
+  /// 每次 location 落定后触发一次 [onNavigation]（应用内导航、浏览器前进后退、
+  /// 深链、pop 均涵盖）。
+  String? _lastOnNavigationLocation;
+  void _fireOnNavigation() {
+    final callback = onNavigation;
+    if (callback == null) {
+      return;
+    }
+    if (_lastOnNavigationLocation == _location) {
+      return;
+    }
+    _lastOnNavigationLocation = _location;
+    callback(_location);
   }
 
   _StackEntry _createEntry(
@@ -794,10 +817,18 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   /// Returns `null` when a newer navigation superseded this one before it
   /// finished resolving.
   /// 若更新的导航在其解析完成前开始，则返回 `null`。
-  Future<Object?> pushNamed(String location, {Object? arguments}) async {
+  Future<Object?> pushNamed(
+    String location, {
+    Object? arguments,
+    int? preferredTab,
+  }) async {
     final normalized = location.isEmpty ? '/' : location;
     final generation = ++_navigationGeneration;
-    final resolution = await _resolve(normalized, arguments: arguments);
+    final resolution = await _resolve(
+      normalized,
+      arguments: arguments,
+      preferredTab: preferredTab,
+    );
     if (generation != _navigationGeneration) {
       // Superseded by a newer navigation; drop the stale result.
       // 被更新的导航取代；丢弃过期结果。
@@ -833,6 +864,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     String location, {
     Object? result,
     Object? arguments,
+    int? preferredTab,
   }) async {
     final normalized = location.isEmpty ? '/' : location;
     if (_overlayStack.isNotEmpty) {
@@ -840,7 +872,11 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       // future is settled by the push that follows), which `pushNamed`
       // already handles. / fullscreen 覆盖层展示中：替换会丢弃它（其 Future
       // 由随后的 push 补完），`pushNamed` 已覆盖该路径。
-      return pushNamed(normalized, arguments: arguments);
+      return pushNamed(
+        normalized,
+        arguments: arguments,
+        preferredTab: preferredTab,
+      );
     }
     final stack = _tabStacks[_currentTab];
     if (stack.length > 1) {
@@ -848,13 +884,21 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       if (!removed.completer.isCompleted) {
         removed.completer.complete(result);
       }
-      return pushNamed(normalized, arguments: arguments);
+      return pushNamed(
+        normalized,
+        arguments: arguments,
+        preferredTab: preferredTab,
+      );
     }
     // At the branch root there is nothing above to remove, so replace the
     // root entry itself. / 位于 branch 根节点，上方没有可移除的条目，
     // 因此替换根本身。
     final generation = ++_navigationGeneration;
-    final resolution = await _resolve(normalized, arguments: arguments);
+    final resolution = await _resolve(
+      normalized,
+      arguments: arguments,
+      preferredTab: preferredTab,
+    );
     if (generation != _navigationGeneration) {
       return null;
     }
@@ -895,8 +939,14 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     String location, {
     Object? result,
     Object? arguments,
+    int? preferredTab,
   }) {
-    return pushReplacementNamed(location, result: result, arguments: arguments);
+    return pushReplacementNamed(
+      location,
+      result: result,
+      arguments: arguments,
+      preferredTab: preferredTab,
+    );
   }
 
   /// Pop the top entry of the current stack. / pop 当前栈的栈顶条目。
@@ -1134,6 +1184,25 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     _syncLocation();
     notifyListeners();
   }
+
+  /// Open a location in the right pane programmatically — the imperative twin of
+  /// a `ZeroLink` tap. On expanded it expands / updates the detail pane; on
+  /// compact / medium it pushes a page.
+  /// 命令式地打开右栏中的某 location（`ZeroLink` 点击的命令式孪生）。expanded
+  /// 下展开 / 更新 detail pane；compact / medium 下 push 页面。
+  Future<Object?> showDetail(String location, {Object? arguments}) =>
+      pushNamed(location, arguments: arguments);
+
+  /// Collapse the detail pane (or pop the top branch entry) — the inverse of
+  /// [showDetail]. / 收起 detail pane（或 pop 栈顶 branch 条目）——[showDetail]
+  /// 的逆操作。
+  void hideDetail() => _popTopOfCurrentTab();
+
+  /// Whether the detail pane is currently open (expanded widths only).
+  /// detail pane 当前是否展开（仅 expanded 宽度）。
+  bool get isDetailOpen =>
+      _widthClass == BreakpointClass.expanded &&
+      _tabStacks[_currentTab].length > 1;
 
   /// Lazily initialize a tab's stack from its default location.
   /// 按默认 location 惰性初始化某个 tab 的栈。
@@ -1399,6 +1468,9 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
         _leftPaneFraction = fraction;
         notifyListeners();
       },
+      // Swipe the detail pane left to dismiss it (expanded widths).
+      // expanded 宽度下左滑 detail pane 即可收起。
+      onDismissDetail: hideDetail,
       children: panes,
     );
     if (!showBreadcrumbs) {
@@ -1452,6 +1524,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     bool isMaster,
   ) {
     final match = entry.match;
+    final route = match.route;
     // `pageKey` is the stable handoff key: when the window width crosses a
     // breakpoint the page content (a route on compact / medium, a pane here)
     // is rebuilt in a different subtree, and the keyed element moves in the
@@ -1459,15 +1532,23 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     // survive. / `pageKey` 是稳定的交接键：窗口宽度跨越断点时页面内容
     // （compact / medium 是 route，此处是 pane）会在不同子树中重建，带键的
     // 元素于同帧移动而非重建——滚动偏移与文本输入得以保留。
+    Widget inner =
+        route.builder?.call(context, match.state) ?? const SizedBox.shrink();
+    if (route.loader != null) {
+      // Data-driven route: resolve before building, showing the loading / error
+      // widget meanwhile. / 数据驱动路由：构建前先解析，期间显示加载 / 错误态。
+      inner = _LoaderBridge(
+        route: route,
+        state: match.state,
+        errorBuilder: errorBuilder,
+        childBuilder: (context, state) =>
+            route.builder?.call(context, state) ?? const SizedBox.shrink(),
+      );
+    }
     final pane = ZeroRouteStateScope(
       key: match.state.pageKey,
       state: match.state,
-      child: ZeroPaneScope(
-        title: match.title,
-        child:
-            match.route.builder?.call(context, match.state) ??
-            const SizedBox.shrink(),
-      ),
+      child: ZeroPaneScope(title: match.title, child: inner),
     );
     final builder = paneBuilder;
     if (builder != null) {
@@ -1488,15 +1569,21 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     // Keyed with the same `pageKey` the expanded pane uses, so the content
     // subtree is handed over in the same frame when the width class changes.
     // 与 expanded pane 使用同一个 `pageKey`，宽度档位变化时内容子树于同帧交接。
+    Widget inner =
+        route.builder?.call(context, match.state) ?? const SizedBox.shrink();
+    if (route.loader != null) {
+      inner = _LoaderBridge(
+        route: route,
+        state: match.state,
+        errorBuilder: errorBuilder,
+        childBuilder: (context, state) =>
+            route.builder?.call(context, state) ?? const SizedBox.shrink(),
+      );
+    }
     final content = ZeroRouteStateScope(
       key: match.state.pageKey,
       state: match.state,
-      child: ZeroPaneScope(
-        title: null,
-        child:
-            route.builder?.call(context, match.state) ??
-            const SizedBox.shrink(),
-      ),
+      child: ZeroPaneScope(title: null, child: inner),
     );
     if (entry.isOverlay) {
       return content;
@@ -1505,9 +1592,36 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     final showChrome =
         bottomBar != null && (isBranchRoot || !route.hidesBottomBarWhenPushed);
     if (!showChrome) {
+      return _withBranchBreadcrumbs(context, content);
+    }
+    return _withBranchBreadcrumbs(
+      context,
+      Scaffold(body: content, bottomNavigationBar: bottomBar(context)),
+    );
+  }
+
+  /// Wraps [content] with the breadcrumb bar on compact / medium when
+  /// [showBreadcrumbsOnBranch] is set and the branch stack has more than one
+  /// entry. / 当开启 [showBreadcrumbsOnBranch] 且 branch 栈多于一项时，在
+  /// compact / medium 为 [content] 顶部加面包屑栏。
+  Widget _withBranchBreadcrumbs(BuildContext context, Widget content) {
+    if (!showBreadcrumbsOnBranch) {
       return content;
     }
-    return Scaffold(body: content, bottomNavigationBar: bottomBar(context));
+    final stack = _tabStacks[_currentTab];
+    if (stack.length <= 1) {
+      return content;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          type: MaterialType.transparency,
+          child: _buildBreadcrumbs(context, stack),
+        ),
+        Expanded(child: content),
+      ],
+    );
   }
 
   Widget _buildBreadcrumbs(BuildContext context, List<_StackEntry> stack) {
@@ -1577,5 +1691,103 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
         }
       }
     }
+  }
+}
+
+/// Resolves a route's [ZeroRoute.loader] before building the page content,
+/// showing a loading / error widget meanwhile and republishing the resolved
+/// [ZeroRouteState.data] to the subtree.
+/// 在构建页面内容前解析路由的 [ZeroRoute.loader]，期间显示加载 / 错误态，
+/// 并把解析得到的 [ZeroRouteState.data] 重新发布给子树。
+class _LoaderBridge extends StatefulWidget {
+  const _LoaderBridge({
+    required this.route,
+    required this.state,
+    this.errorBuilder,
+    required this.childBuilder,
+  });
+
+  final ZeroRoute route;
+  final ZeroRouteState state;
+  final ZeroErrorBuilder? errorBuilder;
+  final Widget Function(BuildContext context, ZeroRouteState state)
+  childBuilder;
+
+  @override
+  State<_LoaderBridge> createState() => _LoaderBridgeState();
+}
+
+class _LoaderBridgeState extends State<_LoaderBridge> {
+  Object? _data;
+  Object? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final futureOr = widget.route.loader!(widget.state);
+      final data = futureOr is Future<dynamic> ? await futureOr : futureOr;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _data = data;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      final builder = widget.route.loadingBuilder;
+      return builder?.call(context, widget.state) ??
+          const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return widget.errorBuilder?.call(context, widget.state.location) ??
+          Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Failed to load ${widget.state.location}',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+    }
+    final updated = widget.state.copyWith(data: _data);
+    return ZeroRouteStateScope(
+      key: updated.pageKey,
+      state: updated,
+      child: widget.childBuilder(context, updated),
+    );
   }
 }

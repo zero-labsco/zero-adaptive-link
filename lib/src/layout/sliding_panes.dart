@@ -83,6 +83,7 @@ class SlidingPanes extends StatefulWidget {
     this.paneBuilder,
     this.onLeftPaneFractionChanged,
     this.onLeftPaneFractionDragEnd,
+    this.onDismissDetail,
     super.key,
   });
 
@@ -149,6 +150,12 @@ class SlidingPanes extends StatefulWidget {
   /// 本回调是「提交点」，监听者可每轮拖拽只反应一次（例如把比例发布给应用其余
   /// 部分），而非每帧一次。
   final ValueChanged<double>? onLeftPaneFractionDragEnd;
+
+  /// Called when the user swipes the detail pane left to dismiss it (expanded
+  /// widths). The host typically collapses the detail pane.
+  /// 用户在 detail pane 上左滑收起时触发（expanded 宽度）。宿主通常收起
+  /// detail pane。
+  final VoidCallback? onDismissDetail;
 
   @override
   State<SlidingPanes> createState() => _SlidingPanesState();
@@ -471,7 +478,21 @@ class _SlidingPanesState extends State<SlidingPanes>
             final masterWidth = _masterWidthFor(total - handleWidth, _fraction);
             final detailWidth = total - handleWidth - masterWidth;
             final masterChild = _wrapPane(context, master, masterIsLeft);
-            final detailChild = _wrapPane(context, detail!, !masterIsLeft);
+            var detailChild = _wrapPane(context, detail!, !masterIsLeft);
+            // Swipe the detail pane left to dismiss it (a quick leftward
+            // flick). / 左滑 detail pane 即可收起（快速向左一拂）。
+            if (widget.onDismissDetail != null && count >= 2) {
+              detailChild = GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragEnd: (details) {
+                  if (details.primaryVelocity != null &&
+                      details.primaryVelocity! < -300) {
+                    widget.onDismissDetail?.call();
+                  }
+                },
+                child: detailChild,
+              );
+            }
             final exitingMaster = _exitingMaster;
             final exitingDetail = _exitingDetail;
             if (shift < 1 && count >= 2) {
