@@ -1014,15 +1014,23 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     }
     if (nav == _rootNavigatorKey.currentState) {
       // The root navigator hosts the shell route, our overlay pages AND
-      // framework routes (dialogs / sheets). Let it pop its own topmost
-      // route first (a framework route or an overlay page); only when it has
-      // nothing to pop does the declarative tab pop apply. Checking
-      // `_overlayStack` alone used to pop the page beneath an open dialog.
+      // framework routes (dialogs / sheets). Dismiss the imperative route
+      // first (a framework route or an overlay page); only when it has
+      // nothing imperative to pop does the declarative tab pop apply.
+      // Checking `_overlayStack` alone used to pop the page beneath an open
+      // dialog; and `nav.canPop()` (the previous guard) is always true for
+      // the single shell route, so on expanded widths — where no branch
+      // navigator is mounted and a pane context resolves to the root
+      // navigator — `nav.pop()` removed the shell route and blanked the app
+      // instead of collapsing the detail pane.
       // root navigator 承载 shell route、我们的 overlay 页与框架级路由
-      // （dialog / sheet）。先让它 pop 自己的栈顶路由（框架级路由或 overlay
-      // 页）；只有当它无可 pop 内容时才走声明式 tab pop。此前只判断
-      // `_overlayStack` 会在对话框打开时 pop 其下方的页面。
-      if (nav.canPop()) {
+      // （dialog / sheet）。先关闭命令式路由（框架级路由或 overlay 页）；
+      // 只有当它无可关闭的命令式路由时才走声明式 tab pop。此前只判断
+      // `_overlayStack` 会在对话框打开时 pop 其下方页面；而 `nav.canPop()`
+      // （旧守卫）对唯一一条 shell route 永远为 true，因此在 expanded 宽度
+      // （未挂载 branch navigator，pane 上下文解析到 root navigator）下
+      // `nav.pop()` 会移除 shell route 让应用空白，而非收起 detail pane。
+      if (_rootRouteCounter.hasImperativeRoute || _overlayStack.isNotEmpty) {
         nav.pop(result);
         return;
       }

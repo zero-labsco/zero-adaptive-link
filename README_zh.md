@@ -17,7 +17,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 推荐升级：** `0.3.0` 让页面状态在跨越断点时得以保留——页面与 expanded pane 现在于同帧交接同一子树，滚动偏移与文本输入在窗口缩放后依然保留。detail pane 首次展开时会滑入，更深层级 push 时视口整体左移一列，系统返回 / Escape / `popFrom` 现在会优先关闭打开的对话框而不是 pop 其下方的页面。同时修复了异步导航竞态（最后请求的 location 现在始终获胜）、`pushReplacementNamed` 现在会替换 branch 根而非压栈，并新增 `ZeroNav.goTab` 与 `ZeroRouteState.pageKey`。建议所有用户升级到最新版本（`^0.3.0`）。
+> **🔔 推荐升级：** `0.3.1` 修复了 `ZeroNav.popFrom(context)` 在 expanded 宽度下让应用空白的问题——该宽度下 pane 上下文解析到 root navigator，旧守卫会 pop 掉 shell route 而非收起 detail pane。`popFrom` 现在与 `maybePop` / `maybePopFrom` 一致：优先关闭框架级路由与 overlay 页，仅当没有可关闭的命令式路由时才走声明式 tab pop。建议所有用户升级到最新版本（`^0.3.1`）。
 
 🌐 **[官方网站](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[pub.dev 页面](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[GitHub 仓库](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -70,7 +70,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.3.0
+  zero_adaptive_link: ^0.3.1
 ```
 
 ### GitHub
@@ -80,7 +80,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.3.0   # 将 0.3.0 替换为所需版本
+      ref: release/v0.3.1   # 将 0.3.1 替换为所需版本
 ```
 
 ---

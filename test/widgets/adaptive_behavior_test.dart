@@ -65,6 +65,25 @@ void main() {
       expect(nav.location, '/products');
     });
 
+    testWidgets('expanded pane collapses on popFrom', (tester) async {
+      await _pumpAt(tester, 1000);
+      await tester.tap(find.text('Product 42'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(Center, 'Detail 42'), findsOneWidget);
+
+      // A pane context resolves to the root navigator on expanded widths;
+      // popFrom must collapse the detail pane, not remove the shell route.
+      // pane 上下文在 expanded 宽度下解析到 root navigator；
+      // popFrom 必须收起 detail pane，而非移除 shell route。
+      final paneContext = tester.element(
+        find.widgetWithText(Center, 'Detail 42'),
+      );
+      ZeroNav.of(paneContext).popFrom(paneContext);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(Center, 'Detail 42'), findsNothing);
+      expect(ZeroNav.of(_context(tester)).location, '/products');
+    });
+
     testWidgets('maybePop at the tab root is a no-op', (tester) async {
       await _pumpAt(tester, 400);
       final nav = ZeroNav.of(_context(tester));

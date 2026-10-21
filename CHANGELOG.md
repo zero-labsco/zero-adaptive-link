@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+### Fixed / 修复
+
+- Fixed `ZeroNav.popFrom(context)` blanking the app on expanded widths: a pane context resolves to the root navigator (no branch navigator is mounted there), and the old `nav.canPop()` guard was always true for the single shell route, so `nav.pop()` removed the shell route instead of collapsing the detail pane. The root branch now mirrors `maybePopFrom` — framework routes and overlay pages dismiss first, and the declarative tab pop applies only when the root navigator has nothing imperative to pop.
+  - 修复 `ZeroNav.popFrom(context)` 在 expanded 宽度下让应用空白的问题：pane 上下文解析到 root navigator（此宽度未挂载 branch navigator），旧守卫 `nav.canPop()` 对唯一一条 shell route 永远为真，于是 `nav.pop()` 移除 shell route 而非收起 detail pane。root 分支现在与 `maybePopFrom` 一致——优先关闭框架级路由与 overlay 页，仅当 root navigator 没有可关闭的命令式路由时才走声明式 tab pop。
+
 ## 0.3.0
 
 ### Fixed / 修复
