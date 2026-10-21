@@ -147,11 +147,57 @@ class ZeroRouteMatcher {
         state: state,
         title: route.title?.call(state),
       );
+      // A route may host a nested shell via `ZeroRoute.shell`; its tabs become
+      // the candidate children instead of `route.routes`.
+      // 路由可通过 `ZeroRoute.shell` 承载嵌套 shell；其 tabs 即为候选子节点，
+      // 取代 `route.routes`。
+      final children = route.shell != null
+          ? route.shell!.tabs.expand((t) => t.routes).toList()
+          : route.routes;
       if (consumed == segments.length) {
-        return [match];
+        if (route.shell != null) {
+          // The location ends at the shell host: descend into the shell's default
+          // tab (its first route, or its `initialLocation`) so its content shows,
+          // exactly like a top-level tab falls back to its default. / location
+          // 止于 shell 宿主：下钻进 shell 的默认 tab（其首条路由或 `initialLocation`）
+          // 使其内容显示，正如顶层 tab 回退到默认值。
+          final defaultTab = route.shell!.tabs.first;
+          // A nested tab's `initialLocation` is a *full* location
+          // (`/settings/profile`) while its route paths are authored relative to
+          // the host (`/profile`). The descent matches the segments that follow
+          // the host, so strip the host prefix from `initialLocation` first —
+          // otherwise the host's own segments leak into the child pattern and
+          // the default tab fails to match at all.
+          // 嵌套 tab 的 `initialLocation` 是*完整* location（`/settings/profile`），
+          // 而其路由路径是相对宿主书写的（`/profile`）。下钻匹配的是宿主之后的段，
+          // 因此要先从 `initialLocation` 剥掉宿主前缀——否则宿主自身的段会混进
+          // 子级 pattern，默认 tab 完全匹配不上。
+          final initial = defaultTab.initialLocation;
+          final String relativeDefault;
+          if (initial != null) {
+            relativeDefault = initial.startsWith('$newActualPrefix/')
+                ? initial.substring(newActualPrefix.length + 1)
+                : (initial.startsWith('/') ? initial.substring(1) : initial);
+          } else {
+            final path = defaultTab.routes.first.path;
+            relativeDefault = path.startsWith('/') ? path.substring(1) : path;
+          }
+          final deeper = _matchTree(
+            routes: children,
+            segments: ZeroRouteMatcher.splitSegments(relativeDefault),
+            patternPrefix: newPatternPrefix,
+            actualPrefix: newActualPrefix,
+            inheritedParams: params,
+            query: query,
+            arguments: arguments,
+          );
+          if (deeper != null) return [match, ...deeper];
+        } else {
+          return [match];
+        }
       }
       final deeper = _matchTree(
-        routes: route.routes,
+        routes: children,
         segments: segments.sublist(consumed),
         patternPrefix: newPatternPrefix,
         actualPrefix: newActualPrefix,

@@ -74,6 +74,28 @@ Compatible with Android predictive back. The root-state Escape key does not trig
 
 兼容 Android predictive back。根态 Escape 键不触发它。
 
+## Real web anchors / 真实 web 锚点
+
+`ZeroLink` is a widget-level link. On the web you may want a **genuine DOM `<a href>`** instead, so the browser can offer "open in new tab", "copy link address" and link previews. `ZeroAnchor` renders exactly that, while clicks still flow through the router (no full page reload).
+
+`ZeroLink` 是组件级链接。在 web 上你可能想要**真正的 DOM `<a href>`**，让浏览器能提供「在新标签中打开」「复制链接地址」与链接预览。`ZeroAnchor` 渲染的就是它，而点击依旧经由路由（不会整页刷新）。
+
+```dart
+ZeroAnchor(
+  location: '/products/42',
+  label: 'Product 42',
+)
+```
+
+Notes / 说明：
+
+- `ZeroAnchor` takes a `label` (text), not a `child` widget — it maps to the anchor's `textContent`. Off-web platforms fall back to a plain `ZeroLink`, so the same code works everywhere.
+  `ZeroAnchor` 接收 `label`（文本）而非 `child` 组件——它对应锚点的 `textContent`。非 web 平台会回退为普通 `ZeroLink`，因此同一份代码各端通用。
+- Because navigation flows through the hash URL, an anchor always uses link / push semantics (the browser owns the history entry). Use `ZeroLink` for `replacement` / `popAndPush`.
+  由于导航经由 hash URL 流转，锚点始终使用链接 / push 语义（历史条目由浏览器掌管）。需要 `replacement` / `popAndPush` 请用 `ZeroLink`。
+- `ZeroRouter.canonicalHref(location)` returns the shareable hash URL for any location (`#/products/42`) — handy for "copy link" buttons and previews, including nested deep links such as `#/settings/profile`.
+  `ZeroRouter.canonicalHref(location)` 返回任意 location 的可分享 hash URL（`#/products/42`）——适合「复制链接」按钮与预览，嵌套深链（如 `#/settings/profile`）同样适用。
+
 ## Browser back on the web / Web 浏览器返回
 
 In-app navigation pushes a history entry (`history.pushState`); browser back / forward feeds a new location into the same pipeline, which rebuilds the stacks from the URL. Back collapses the rightmost pane one level at a time.

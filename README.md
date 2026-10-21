@@ -17,7 +17,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 Upgrade recommended:** `0.4.0` makes `ZeroLink` keyboard- and screen-reader-accessible, adds `ZeroRouter.onNavigation` for analytics, `ZeroNav.showDetail` / `hideDetail` / `ZeroBackButton` for programmatic master-detail, a `ZeroRoute.loader` for data-driven routes, swipe-to-dismiss for the detail pane, a responsive `ZeroNavigationChrome`, breadcrumbs on compact / medium, and explicit `preferredTab` / `ZeroLink.tabIndex` control. It also fixes `popFrom` blanking the app on expanded widths. All users are encouraged to upgrade to the latest version (`^0.4.0`).
+> **🔔 Upgrade recommended:** `0.5.0` adds nested `ZeroShell` (a `ZeroRoute` can host its own tabs / panes via `ZeroRoute.shell` + `shellBuilder`), real web `<a href>` anchors so links open in a new tab and preview correctly, and scroll & focus restoration across breakpoint crossings and browser history. It also keeps `ZeroLink` accessible, `ZeroRouter.onNavigation`, `ZeroRoute.loader`, swipe-to-dismiss, `ZeroNavigationChrome`, branch breadcrumbs, and explicit `preferredTab` / `ZeroLink.tabIndex`. All users are encouraged to upgrade to the latest version (`^0.5.0`).
 
 🌐 **[Official Website](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[View on pub.dev](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[View on GitHub](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -46,11 +46,14 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 - **Master-detail pane semantics** — the detail pane slides in from the side set by `paneSide` (right by default, or left to mirror the layout: master on the right, detail from the left); a draggable resize handle splits the two columns; three or more columns are deliberately out of scope.
 - **Animated pane transitions** — the detail pane slides in on its first expansion, a deeper push slides the viewport left by one column (the replaced master exits, the new pair slides in), and a pop slides it back.
 - **State survives width changes** — pages and expanded panes hand the same subtree over in the same frame when the window crosses a breakpoint, so scroll offsets and text input do not reset; the stable key is exposed as `ZeroRouteState.pageKey`.
+- **Scroll & focus restoration** — `PageStorage`-based scroll restoration keyed by `ZeroRouteState.restorationId`, plus primary focus restore across breakpoint crossings and browser history changes; opt out with `restoreScrollOffset` / `restoreFocus`.
 - **Expand left or right** — pick `SlidingPanesSide.right` (master on the left) or `SlidingPanesSide.left` (master on the right) via `paneSide`, and flip it at runtime with `paneSideListenable` without rebuilding the router.
 - **Pane sizing with a ceiling** — set `leftPaneFraction` for the initial split and `maxLeftPaneWidth` so the master pane still scales with the window but stops at a sane width on ultra-wide displays (the detail pane absorbs the remainder; dragging respects the ceiling too).
 - **Idempotent focus** — tapping an already visible pane focuses it instead of stacking a duplicate.
 - **URL-addressable and deep-linkable** — every screen is in the route table, so its URL can express it; on the web the hash strategy (`/#/products/42`) keeps browser back, refresh and deep links on the same location pipeline as in-app navigation (GitHub Pages needs no 404 fallback).
+- **Real web anchors** — `ZeroAnchor` renders a genuine DOM `<a href>` on web (via `dart:js_interop`), so "open in new tab" and link previews work while clicks still route through the plugin; `ZeroRouter.canonicalHref(location)` returns the shareable hash URL.
 - **Declarative route table** — nested routes, `:param` segments, route names, titles, router-level and route-level redirects, `onExit` hooks, `fullscreen` / `fullscreenDialog` overlays, custom transitions and an `errorBuilder`.
+- **Nested shells** — a `ZeroRoute` can host its own `ZeroShell` via `shell` + `shellBuilder`, so a branch can own a second level of tabs / panes; route tables nest arbitrarily deep and a deep link like `#/settings/profile` restores every level.
 - **Navigator-shaped verbs** — `pushNamed` / `pop` / `maybePop` / `popUntil` / `canPop` and friends share their names and signatures with `NavigatorState`, so migration costs nothing.
 - **Compact chrome that behaves** — the bottom `NavigationBar` is rendered inside branch pages, so a bottom sheet opened with `useRootNavigator: false` covers it; the system back button closes the sheet first.
 - **Zero runtime dependencies** — pure Dart, no platform channels, no native code; `ValueNotifier` / `InheritedWidget` only.
@@ -72,7 +75,7 @@ Adaptive navigation for Flutter: write **one `onTap`** and the plugin does the r
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.4.0
+  zero_adaptive_link: ^0.5.0
 ```
 
 ### GitHub
@@ -82,7 +85,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.4.0   # replace 0.4.0 with the version you need
+      ref: release/v0.5.0   # replace 0.5.0 with the version you need
 ```
 
 ---
@@ -226,6 +229,22 @@ SlidingPanes(
 
 ## API Reference
 
+### ZeroRouter
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `initialLocation` | `String` | Location to resolve on first paint |
+| `redirect` / `redirectLimit` | `ZeroRouterRedirect?` / `int` | Router-level redirect and its hop limit |
+| `errorBuilder` | `ZeroErrorBuilder?` | Rendered when no route matches |
+| `paneSide` / `paneSideListenable` | `SlidingPanesSide` / `ValueListenable<SlidingPanesSide>?` | Which side the detail pane expands from, optionally driven live |
+| `leftPaneFraction` / `maxLeftPaneWidth` | `double` / `double?` | Initial split and a pixel ceiling for the master pane |
+| `slideDuration` / `slideCurve` | `Duration` / `Curve` | Pane transition timing |
+| `showBreadcrumbs` / `breadcrumbsBuilder` | `bool` / `ZeroBreadcrumbsBuilder?` | Expanded-width breadcrumb bar |
+| `onNavigation` | `void Function(String location)?` | Fired after every successful location change |
+| `restoreScrollOffset` | `bool` | `PageStorage`-based scroll restoration (default `true`) |
+| `restoreFocus` | `bool` | Restore primary focus across breakpoint crossings / history changes (default `true`) |
+| `canonicalHref(location)` | `static String` | Shareable hash URL for a location (`#/products/42`) |
+
 ### ZeroLink
 
 | Parameter | Type | Description |
@@ -234,6 +253,18 @@ SlidingPanes(
 | `child` | `Widget` | The tappable content |
 | `onTap` | `VoidCallback?` | Overrides the default open behavior |
 | `cursor` | `MouseCursor?` | Defaults to a hand cursor on web / desktop |
+| `mode` | `ZeroLinkMode` | `push` (default), `replacement`, `popAndPush` or `fullscreen` |
+| `tabIndex` | `int?` | Open the location in this tab specifically |
+
+### ZeroAnchor
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `location` | `String` | Target location (rendered as `#location` in the href) |
+| `label` | `String` | The anchor text |
+| `mode` | `ZeroLinkMode` | Kept for API parity with `ZeroLink`; anchors always use link semantics |
+
+Renders a genuine DOM `<a href>` on web so "open in new tab" and link previews work; falls back to a plain `ZeroLink` off-web.
 
 ### ZeroNav
 
@@ -261,6 +292,8 @@ SlidingPanes(
 | `opaque` / `barrierColor` / `barrierDismissible` | — | Modal route properties |
 | `transitionsBuilder` | `RouteTransitionsBuilder?` | Custom page transitions |
 | `routes` | `List<ZeroRoute>` | Nested routes |
+| `shell` | `ZeroShell?` | Host a nested shell inside this route |
+| `shellBuilder` | `Widget Function(BuildContext, ZeroRouteState, Widget)?` | Builder for a route that hosts `shell`; `child` is the nested shell (mutually exclusive with `builder`) |
 
 ### Breakpoints
 

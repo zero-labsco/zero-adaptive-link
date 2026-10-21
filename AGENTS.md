@@ -25,6 +25,7 @@ This file defines the architecture, coding conventions, and required workflows f
 - `lib/src/widgets/zero_link.dart` - `ZeroLink` (GestureDetector + MouseRegion; no Material ancestor required).
 - `lib/src/shell/shell.dart` - `ZeroShellChrome` (compact bottom bar rendered inside branch pages).
 - Widget structure: a root `Navigator` (pages: shell page + fullscreen overlay pages) hosts the shell route; the shell builder receives `child` = per-tab `Navigator` on compact / medium, or `SlidingPanes` over the last two matches on expanded.
+- Nested shells: a `ZeroRoute` may host another `ZeroShell` via `shell` + `shellBuilder`. Every shell level renders from the same **flat** match stack (the matcher descends into nested tabs; the delegate re-resolves the whole stack on each navigation), so a nested shell needs no private state machine. A nested tab's `initialLocation` is a full location, while its routes are host-relative — the matcher must strip the host prefix when descending into the default tab.
 - **Pure Dart**: there are no `android/` or `ios/` directories, no method channels, and no platform code. Do not add any.
 
 ## Dependencies and SDK constraints

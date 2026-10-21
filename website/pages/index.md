@@ -18,6 +18,9 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度决
 | **Idempotent focus** | Tapping a visible pane focuses it / 点击已可见 pane 时聚焦而非重复展开 |
 | **Deep links** | Hash strategy on web, browser back works / Web hash 策略，浏览器返回可用 |
 | **Declarative route table** | Nested routes, `:param`, redirects, `onExit`, fullscreen / 嵌套路由、参数、重定向、退出钩子、全屏覆盖 |
+| **Nested shells** | A `ZeroRoute` hosts its own `ZeroShell` via `shell` + `shellBuilder` / 路由可通过 `shell` + `shellBuilder` 承载自己的 `ZeroShell` |
+| **Real web anchors** | `ZeroAnchor` renders a genuine DOM `<a href>`; `canonicalHref` shares it / `ZeroAnchor` 渲染真正的 DOM `<a href>`；`canonicalHref` 返回可分享链接 |
+| **Scroll & focus restoration** | Offsets and focus survive breakpoint crossings and history / 滚动偏移与焦点跨断点、跨历史保留 |
 | **Navigator-shaped verbs** | `pushNamed` / `pop` / `maybePop` / `popUntil` / `canPop` / 与 Navigator 同名同签名 |
 | **Zero runtime deps** | Pure Dart, no platform channels / 纯 Dart，无 platform channel |
 | **Layout standalone** | `SlidingPanes` / `SlidingPane` / `Breadcrumbs` usable alone / 布局组件可单独使用 |
