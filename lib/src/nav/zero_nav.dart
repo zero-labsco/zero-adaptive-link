@@ -97,6 +97,24 @@ class ZeroNav {
     );
   }
 
+  /// Open [location] as a fullscreen overlay above the shell at any width, even
+  /// when its route is not declared `fullscreen`. Backs [ZeroLinkMode.fullscreen]
+  /// and `ZeroAnchor` on non-web platforms.
+  /// 在任意宽度下以覆盖 shell 的 fullscreen 覆盖层打开 [location]，即使该路由
+  /// 未声明 `fullscreen`。供 [ZeroLinkMode.fullscreen] 与非 web 平台的
+  /// `ZeroAnchor` 使用。
+  Future<Object?> openFullscreen(
+    String location, {
+    Object? arguments,
+    int? preferredTab,
+  }) {
+    return _delegate.pushFullscreenNamed(
+      location,
+      arguments: arguments,
+      preferredTab: preferredTab,
+    );
+  }
+
   /// Push a location; the returned future is completed by `pop(result)`.
   /// push 一个 location；返回的 Future 由 `pop(result)` 完成。
   Future<Object?> pushNamed(

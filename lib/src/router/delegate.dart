@@ -110,10 +110,14 @@ class _ImperativeRouteCounter extends NavigatorObserver {
 
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    if (newRoute?.settings is! Page<Object?>) {
+    // Guard the nulls explicitly: `null.settings is! Page` is `true`, which
+    // used to shift the counter on a replace that supplied only one route.
+    // 显式判空：`null.settings is! Page` 为 `true`，过去只提供一侧 route 的
+    // replace 会让计数偏移。
+    if (newRoute != null && newRoute.settings is! Page<Object?>) {
       count++;
     }
-    if (oldRoute?.settings is! Page<Object?>) {
+    if (oldRoute != null && oldRoute.settings is! Page<Object?>) {
       count--;
     }
   }
@@ -366,6 +370,11 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     _initSync(initialLocation);
   }
 
+  /// Becomes true once the initial route path has resolved; guards
+  /// [onNavigation] from firing before the router is mounted.
+  /// 初始 route path 解析完成后置为 true，防止 [onNavigation] 在路由挂载前触发。
+  bool _ready = false;
+
   final String initialLocation;
   final ZeroRouterRedirect? redirect;
   final int redirectLimit;
@@ -476,7 +485,9 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   /// Whether a pop would remove something (overlay or a non-root page).
   /// pop 是否会移除某些内容（覆盖层或非根页面）。
   bool get canPop =>
-      _overlayStack.isNotEmpty || _tabStacks[_currentTab].length > 1;
+      _rootRouteCounter.hasImperativeRoute ||
+      _overlayStack.isNotEmpty ||
+      _tabStacks[_currentTab].length > 1;
 
   List<ZeroTab> get _tabs => _shell.tabs;
 
@@ -497,6 +508,31 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
         );
         _namedRoutes[name] = fullPath;
       }
+      // A nested shell's tabs are part of the same flat route table: their
+      // names must resolve and collide exactly like ordinary child routes.
+      // 嵌套 shell 的 tabs 同属这张扁平路由表：其名称必须能像普通子路由一样
+      // 解析，并且同样参与重名校验。
+      final shell = route.shell;
+      if (shell != null) {
+        // `ZeroRoute` is const-constructible, so `routes.isEmpty` cannot be
+        // asserted in its initializer list — check the exclusivity here.
+        // `ZeroRoute` 是 const 构造，无法在初始化列表中断言 `routes.isEmpty`，
+        // 因此把互斥校验放在这里。
+        assert(
+          route.routes.isEmpty,
+          'ZeroRoute.shell and ZeroRoute.routes are mutually exclusive; '
+          'routes are ignored when shell is set. '
+          'ZeroRoute.shell 与 ZeroRoute.routes 互斥；设置 shell 后 routes 会被忽略。',
+        );
+        for (final tab in shell.tabs) {
+          assert(
+            tab.routes.isNotEmpty,
+            'Every nested ZeroTab needs at least one ZeroRoute. '
+            '每个嵌套 ZeroTab 至少需要一条 ZeroRoute。',
+          );
+          _registerRouteNames(tab.routes, fullPath);
+        }
+      }
       _registerRouteNames(route.routes, fullPath);
     }
   }
@@ -516,7 +552,11 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
         return;
       }
     }
-    _applyError(normalized);
+    // No `onNavigation` during construction: the router is not mounted yet
+    // and there was no *successful location change* to report.
+    // 构造期不触发 `onNavigation`：此时路由尚未挂载，也不存在「成功的
+    // location 变化」可供上报。
+    _applyError(normalized, fireNavigation: false);
   }
 
   // ------------------------------------------------------- configuration ----
@@ -525,8 +565,17 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   String get currentConfiguration => _location;
 
   @override
-  Future<void> setInitialRoutePath(String configuration) {
-    return _navigateTo(configuration, external: true, force: true);
+  Future<void> setInitialRoutePath(String configuration) async {
+    try {
+      await _navigateTo(configuration, external: true, force: true);
+    } finally {
+      // `onNavigation` reports successful location changes only: nothing
+      // during the initial resolution qualifies, and no widget tree is mounted
+      // yet to receive the callback.
+      // `onNavigation` 只上报成功的 location 变化：初始解析期间的任何结果都不算，
+      // 而且此时还没有挂载的组件树来接收回调。
+      _ready = true;
+    }
   }
 
   @override
@@ -573,7 +622,14 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     int? preferredTab,
   }) async {
     var current = location.isEmpty ? '/' : location;
+    final visited = <String>{};
     for (var hop = 0; hop <= redirectLimit; hop++) {
+      // A -> B -> A used to burn every hop before falling through to the error
+      // page; detect the cycle as soon as a location repeats.
+      // A -> B -> A 过去要耗尽所有跳数才落到错误页；一旦 location 重复即判定为环。
+      if (!visited.add(current)) {
+        return null;
+      }
       final routerTarget = redirect == null ? null : await redirect!(current);
       if (routerTarget != null && routerTarget != current) {
         current = routerTarget;
@@ -627,9 +683,11 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     notifyListeners();
   }
 
-  void _applyInternal(_Resolution resolution) {
+  void _applyInternal(_Resolution resolution, {bool force = false}) {
     final targetLocation = resolution.matchList.location;
-    if (targetLocation == _location && resolution.tabIndex == _currentTab) {
+    if (!force &&
+        targetLocation == _location &&
+        resolution.tabIndex == _currentTab) {
       return; // Idempotent: the target is already the current location.
     }
     if (resolution.tabIndex != _currentTab) {
@@ -638,13 +696,33 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     }
     final stack = _tabStacks[_currentTab];
 
-    // Focus an existing entry instead of pushing a duplicate.
-    // 已存在的条目：聚焦而非重复 push。
+    // Focus an existing entry instead of pushing a duplicate. A fullscreen
+    // overlay covers the shell, so focusing a branch entry must dismiss it —
+    // otherwise `_syncLocation` would snap the URL straight back to the
+    // overlay's location.
+    // 已存在的条目：聚焦而非重复 push。fullscreen 覆盖层盖住了 shell，因此
+    // 聚焦 branch 条目必须先关掉它——否则 `_syncLocation` 会立刻把 URL
+    // 拉回覆盖层的 location。
     final existingIndex = stack.indexWhere(
       (entry) => entry.match.location == targetLocation,
     );
     if (existingIndex >= 0) {
+      _clearOverlay();
       _popStackTo(stack, existingIndex + 1);
+      _syncLocation();
+      notifyListeners();
+      return;
+    }
+
+    // Only the query changed: reconcile the leaf instead of pushing a second
+    // copy of the same page. The matcher keeps ancestor locations query-free,
+    // so `_setTabStack` reuses them and only the leaf is replaced.
+    // 仅 query 变化：协调（替换）叶子而非再压入一份相同页面。matcher 让祖先
+    // location 不带 query，因此 `_setTabStack` 会复用祖先，只替换叶子。
+    if (_overlayStack.isEmpty &&
+        stack.isNotEmpty &&
+        _pathOf(stack.last.match.location) == _pathOf(targetLocation)) {
+      _applyStacks(_currentTab, resolution.matchList, replace: true);
       _syncLocation();
       notifyListeners();
       return;
@@ -659,6 +737,12 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     notifyListeners();
   }
 
+  /// The path part of a location (query stripped). / location 的 path 部分。
+  static String _pathOf(String location) {
+    final marker = location.indexOf('?');
+    return marker < 0 ? location : location.substring(0, marker);
+  }
+
   /// Apply [matchList] to the tab stack and the overlay stack, splitting off a
   /// fullscreen leaf into the overlay.
   /// 将 [matchList] 应用到 tab 栈与覆盖栈，并把 fullscreen 叶子拆到覆盖栈。
@@ -666,13 +750,19 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     int tabIndex,
     MatchList matchList, {
     required bool replace,
+    bool forceFullscreen = false,
   }) {
     final matches = matchList.matches;
     if (matches.isEmpty) {
       return;
     }
     final leaf = matches.last;
-    final isFullscreen = leaf.route.fullscreen || leaf.route.fullscreenDialog;
+    // `forceFullscreen` backs `ZeroLinkMode.fullscreen`: the caller wants the
+    // matched leaf to cover the shell even when its route is not declared
+    // `fullscreen`. / `forceFullscreen` 支撑 `ZeroLinkMode.fullscreen`：调用方
+    // 希望叶子覆盖 shell，即使其路由未声明 `fullscreen`。
+    final isFullscreen =
+        forceFullscreen || leaf.route.fullscreen || leaf.route.fullscreenDialog;
     final tabMatches = isFullscreen
         ? matches.sublist(0, matches.length - 1)
         : matches;
@@ -713,7 +803,7 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     return matched?.matches ?? const <ZeroRouteMatch>[];
   }
 
-  void _applyError(String location) {
+  void _applyError(String location, {bool fireNavigation = true}) {
     final errorRoute = ZeroRoute(
       path: location,
       builder: (context, state) =>
@@ -730,7 +820,13 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     if (_locationNotifier.value != _location) {
       _locationNotifier.value = _location;
     }
-    _fireOnNavigation();
+    // `_initSync` opts out: an error during construction is not a successful
+    // location change, and no widget tree is mounted to receive the callback.
+    // `_initSync` 会关闭回调：构造期的错误不是「成功的 location 变化」，此时
+    // 也还没有挂载的组件树来接收回调。
+    if (fireNavigation) {
+      _fireOnNavigation();
+    }
     notifyListeners();
   }
 
@@ -754,7 +850,11 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       final match = matchList.matches[i];
       _StackEntry? existing;
       for (final entry in oldStack) {
-        if (entry.match.location == match.location) {
+        // Reuse only when the arguments match too: a deep link that carries
+        // fresh arguments must not silently keep the previous entry's state.
+        // 参数也一致才可复用：携带新 arguments 的深链不能静默沿用旧条目的状态。
+        if (entry.match.location == match.location &&
+            entry.match.state.arguments == match.state.arguments) {
           existing = entry;
           break;
         }
@@ -798,6 +898,9 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   /// 深链、pop 均涵盖）。
   String? _lastOnNavigationLocation;
   void _fireOnNavigation() {
+    if (!_ready) {
+      return;
+    }
     final callback = onNavigation;
     if (callback == null) {
       return;
@@ -879,45 +982,19 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     return SynchronousFuture<Object?>(null);
   }
 
-  /// Replace the top entry with a location. / 用 location 替换栈顶条目。
-  ///
-  /// At a branch root (a single-entry stack) the root itself is replaced —
-  /// Navigator semantics — instead of stacking the new route on top of it.
-  /// 位于 branch 根节点（单条目栈）时替换根本身——与 Navigator 语义一致——
-  /// 而不是把新路由压栈。
-  Future<Object?> pushReplacementNamed(
+  /// Push [location] as a fullscreen overlay above the shell at any width.
+  /// Backs `ZeroNav.openFullscreen` / `ZeroLinkMode.fullscreen`: the matched
+  /// leaf is split into the overlay stack even when its route does not declare
+  /// `fullscreen`.
+  /// 在任意宽度下把 [location] 作为覆盖 shell 的 fullscreen 覆盖层压入。支撑
+  /// `ZeroNav.openFullscreen` / `ZeroLinkMode.fullscreen`：即使叶子路由未声明
+  /// `fullscreen`，也会把它拆进覆盖栈。
+  Future<Object?> pushFullscreenNamed(
     String location, {
-    Object? result,
     Object? arguments,
     int? preferredTab,
   }) async {
     final normalized = location.isEmpty ? '/' : location;
-    if (_overlayStack.isNotEmpty) {
-      // A fullscreen overlay is showing: the replacement discards it (its
-      // future is settled by the push that follows), which `pushNamed`
-      // already handles. / fullscreen 覆盖层展示中：替换会丢弃它（其 Future
-      // 由随后的 push 补完），`pushNamed` 已覆盖该路径。
-      return pushNamed(
-        normalized,
-        arguments: arguments,
-        preferredTab: preferredTab,
-      );
-    }
-    final stack = _tabStacks[_currentTab];
-    if (stack.length > 1) {
-      final removed = stack.removeLast();
-      if (!removed.completer.isCompleted) {
-        removed.completer.complete(result);
-      }
-      return pushNamed(
-        normalized,
-        arguments: arguments,
-        preferredTab: preferredTab,
-      );
-    }
-    // At the branch root there is nothing above to remove, so replace the
-    // root entry itself. / 位于 branch 根节点，上方没有可移除的条目，
-    // 因此替换根本身。
     final generation = ++_navigationGeneration;
     final resolution = await _resolve(
       normalized,
@@ -931,12 +1008,76 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       _applyError(normalized);
       return null;
     }
-    if (resolution.tabIndex == _currentTab) {
+    _applyStacks(
+      resolution.tabIndex,
+      resolution.matchList,
+      replace: true,
+      forceFullscreen: true,
+    );
+    _currentTab = resolution.tabIndex;
+    _syncLocation();
+    notifyListeners();
+    return _futureFor(resolution.matchList.location);
+  }
+
+  /// Replace the top entry with a location. / 用 location 替换栈顶条目。
+  ///
+  /// At a branch root (a single-entry stack) the root itself is replaced —
+  /// Navigator semantics — instead of stacking the new route on top of it.
+  /// 位于 branch 根节点（单条目栈）时替换根本身——与 Navigator 语义一致——
+  /// 而不是把新路由压栈。
+  ///
+  /// The stack is mutated only *after* the resolve completes. Mutating it
+  /// before the `await` and then delegating to `pushNamed` used to leave the
+  /// stack truncated (with its completer settled) when a newer navigation
+  /// superseded that inner push — the generation guard dropped the result
+  /// without any rollback or rebuild.
+  /// 栈只在解析完成*之后*才修改。过去在 `await` 前删栈再委托 `pushNamed`，
+  /// 当更新的导航取代内层 push 时，generation 守卫丢弃结果且不回滚、不重建，
+  /// 于是栈被截断、completer 提前补完却无人通知。
+  Future<Object?> pushReplacementNamed(
+    String location, {
+    Object? result,
+    Object? arguments,
+    int? preferredTab,
+  }) async {
+    final normalized = location.isEmpty ? '/' : location;
+    final generation = ++_navigationGeneration;
+    final resolution = await _resolve(
+      normalized,
+      arguments: arguments,
+      preferredTab: preferredTab,
+    );
+    if (generation != _navigationGeneration) {
+      return null;
+    }
+    if (resolution == null) {
+      _applyError(normalized);
+      return null;
+    }
+    if (resolution.tabIndex != _currentTab) {
+      _applyExternal(resolution);
+      return _futureFor(resolution.matchList.location);
+    }
+    final stack = _tabStacks[_currentTab];
+    final rootOnly = _overlayStack.isEmpty && stack.length <= 1;
+    if (_overlayStack.isEmpty && stack.length > 1) {
+      final removed = stack.removeLast();
+      if (!removed.completer.isCompleted) {
+        removed.completer.complete(result);
+      }
+    }
+    if (rootOnly) {
       _applyStacks(_currentTab, resolution.matchList, replace: true);
       _syncLocation();
       notifyListeners();
     } else {
-      _applyExternal(resolution);
+      // `force` skips the idempotence short-circuit: `_location` still names
+      // the entry we just removed, so a replacement with the same location
+      // must still rebuild the stack.
+      // `force` 跳过幂等短路：`_location` 仍指向刚移除的条目，因此即使替换成
+      // 相同 location 也必须重建栈。
+      _applyInternal(resolution, force: true);
     }
     return _futureFor(resolution.matchList.location);
   }
@@ -948,6 +1089,21 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     bool Function(ZeroRouteMatch) predicate, {
     Object? arguments,
   }) async {
+    final normalized = location.isEmpty ? '/' : location;
+    // Resolve first, then prune: pruning synchronously before the `await`
+    // bypassed the generation guard and left an unannounced truncated stack
+    // when this navigation was superseded.
+    // 先解析再裁剪：在 `await` 之前同步裁剪会绕过 generation 守卫，被取代时
+    // 留下一个未通知的残缺栈。
+    final generation = ++_navigationGeneration;
+    final resolution = await _resolve(normalized, arguments: arguments);
+    if (generation != _navigationGeneration) {
+      return null;
+    }
+    if (resolution == null) {
+      _applyError(normalized);
+      return null;
+    }
     final stack = _tabStacks[_currentTab];
     while (stack.length > 1 && !predicate(stack.last.match)) {
       final removed = stack.removeLast();
@@ -955,7 +1111,8 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
         removed.completer.complete(null);
       }
     }
-    return pushNamed(location, arguments: arguments);
+    _applyInternal(resolution, force: true);
+    return _futureFor(resolution.matchList.location);
   }
 
   /// Pop the current entry and push a location.
@@ -1263,10 +1420,29 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     if (pattern == null) {
       return null;
     }
-    var path = pattern;
-    pathParameters.forEach((key, value) {
-      path = path.replaceAll(':$key', Uri.encodeComponent(value));
-    });
+    // Replace whole `:param` tokens only. `replaceAll(':$key', ...)` used to
+    // corrupt a longer parameter name (`:id` also matched the start of
+    // `:identity`) and silently returned a pattern with unresolved
+    // placeholders when a parameter was missing.
+    // 只替换完整的 `:param` 标记。过去的 `replaceAll(':$key', ...)` 会破坏更长的
+    // 参数名（`:id` 也会命中 `:identity` 的开头），且参数缺失时会静默返回仍带
+    // 占位符的 pattern。
+    final missing = <String>[];
+    final path = pattern.replaceAllMapped(
+      RegExp(r':([A-Za-z_][A-Za-z0-9_]*)'),
+      (match) {
+        final key = match.group(1)!;
+        final value = pathParameters[key];
+        if (value == null) {
+          missing.add(key);
+          return match.group(0)!;
+        }
+        return ZeroRouteMatcher.encodeSegment(value);
+      },
+    );
+    if (missing.isNotEmpty) {
+      return null;
+    }
     if (queryParameters.isEmpty) {
       return path;
     }
@@ -1276,7 +1452,11 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
   /// Re-run redirects for the current location (e.g. after an auth change).
   /// 对当前 location 重跑重定向（例如登录态变化后）。
   Future<void> refresh() async {
-    await _navigateTo(_location, external: true, force: true);
+    // `external: false` keeps an open fullscreen overlay when the redirects
+    // resolve back to the same location, instead of rebuilding both stacks and
+    // clearing the overlay. / 用 `external: false`：重定向仍解析回当前 location
+    // 时保留已打开的 fullscreen 覆盖层，而不是重建整条栈并清掉覆盖层。
+    await _navigateTo(_location, external: false, force: true);
   }
 
   Future<bool> _rootMaybePop([Object? result]) async {
@@ -1814,8 +1994,32 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     if (subStack.isEmpty) {
       return 0;
     }
-    final rootRoute = subStack.first.match.route;
-    final index = shell.tabs.indexWhere((t) => t.routes.contains(rootRoute));
+    final root = subStack.first;
+    // Compare by path, not object identity: tabs may share one `const
+    // ZeroRoute`, which used to always highlight the first tab.
+    // 按 path 比较而非对象身份：多个 tab 可能复用同一个 `const ZeroRoute`，
+    // 过去这会让高亮永远落在第一个 tab。
+    final rootPath = root.match.route.path;
+    final candidates = <int>[
+      for (var i = 0; i < shell.tabs.length; i++)
+        if (shell.tabs[i].routes.any((r) => r.path == rootPath)) i,
+    ];
+    if (candidates.length == 1) {
+      return candidates.first;
+    }
+    if (candidates.length > 1) {
+      final location = root.match.location;
+      for (final i in candidates) {
+        final initial = shell.tabs[i].initialLocation;
+        if (initial != null && location.startsWith(initial)) {
+          return i;
+        }
+      }
+      return candidates.first;
+    }
+    final index = shell.tabs.indexWhere(
+      (t) => t.routes.contains(root.match.route),
+    );
     return index < 0 ? 0 : index;
   }
 
@@ -1836,10 +2040,23 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     // state machine. / `goTab` 写入新的 location：delegate 重新解析整条（扁平）
     // 栈并渲染每一层 shell，因此嵌套 shell 无需私有状态机。
     void goTab(int index, {String? initialLocation}) {
+      if (index < 0 || index >= shell.tabs.length) {
+        return;
+      }
       final tab = shell.tabs[index];
+      if (initialLocation == null && tab.routes.isEmpty) {
+        return;
+      }
+      // Strip the query from the host location: joining a path pattern onto
+      // `/settings?x=1` used to produce `/settings?x=1/profile`.
+      // 去掉宿主 location 的 query：把相对 pattern 拼到 `/settings?x=1` 上过去会
+      // 生成 `/settings?x=1/profile`。
       final target =
           initialLocation ??
-          ZeroRouteMatcher.joinPattern(hostLocation, tab.routes.first.path);
+          ZeroRouteMatcher.joinPattern(
+            _pathOf(hostLocation),
+            tab.routes.first.path,
+          );
       unawaited(_navigateTo(target, external: true, forceTab: _currentTab));
     }
 
@@ -1950,9 +2167,16 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
         if (index < 0 || index >= stack.length) {
           return;
         }
-        _popStackTo(_tabStacks[_currentTab], index + 1);
-        _syncLocation();
-        notifyListeners();
+        // Re-resolve the target location instead of truncating the *outer* tab
+        // stack by a sub-stack index: nested shells pass their own suffix here,
+        // so an index-based pop used to cut the wrong stack.
+        // 重新解析目标 location，而不是用 sub-stack 的下标去截断*外层* tab 栈：
+        // 嵌套 shell 在这里传入的是自己的后缀，按下标 pop 过去会截断错误的栈。
+        final target = stack[index].match.location;
+        if (target == _location) {
+          return;
+        }
+        unawaited(_navigateTo(target, external: true, forceTab: _currentTab));
       },
     );
   }
@@ -1987,6 +2211,9 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
     for (final entry in _overlayStack) {
       if (identical(entry.page, page)) {
         _overlayStack.remove(entry);
+        if (!entry.completer.isCompleted) {
+          entry.completer.complete(null);
+        }
         _syncLocation();
         notifyListeners();
         return;
@@ -1996,6 +2223,16 @@ class ZeroRouterDelegate extends RouterDelegate<String> with ChangeNotifier {
       final stack = _tabStacks[t];
       for (var i = stack.length - 1; i >= 0; i--) {
         if (identical(stack[i].page, page)) {
+          // Only the page that was actually popped receives `onPopInvoked`;
+          // settle every discarded entry too, so `await ZeroNav.open(...)`
+          // can never hang on a page removed by a range truncation.
+          // 只有真正被 pop 的页面会收到 `onPopInvoked`；其余被范围截断一并移除的
+          // 条目也要补完，避免 `await ZeroNav.open(...)` 永久挂起。
+          for (final removed in stack.sublist(i)) {
+            if (!removed.completer.isCompleted) {
+              removed.completer.complete(null);
+            }
+          }
           stack.removeRange(i, stack.length);
           if (t == _currentTab) {
             _syncLocation();
@@ -2091,6 +2328,12 @@ class _LoaderBridgeState extends State<_LoaderBridge> {
                       'Failed to load ${widget.state.location}',
                       textAlign: TextAlign.center,
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '$_error',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                 ),
               ),
@@ -2098,8 +2341,12 @@ class _LoaderBridgeState extends State<_LoaderBridge> {
           );
     }
     final updated = widget.state.copyWith(data: _data);
+    // The outer page / pane already owns `match.state.pageKey`; reusing it here
+    // would mount the same GlobalKey twice. This inner scope only republishes
+    // the resolved `data`, so it needs no key of its own.
+    // 外层 page / pane 已经持有 `match.state.pageKey`；这里再用会挂载同一个
+    // GlobalKey 两次。内层 scope 只负责重新发布解析后的 `data`，无需自带键。
     return ZeroRouteStateScope(
-      key: updated.pageKey,
       state: updated,
       child: widget.childBuilder(context, updated),
     );
@@ -2142,15 +2389,32 @@ class _FocusRestorerState extends State<_FocusRestorer> {
   @override
   void initState() {
     super.initState();
+    _maybeRestoreFocus();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FocusRestorer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The same widget can be reused across a history change: react to a newly
+    // assigned focused id instead of only checking in `initState`.
+    // 同一个 widget 可能跨历史导航被复用：要响应新赋值的 focused id，而不是
+    // 只在 `initState` 里判断一次。
+    if (oldWidget.initialFocusedId != widget.initialFocusedId) {
+      _maybeRestoreFocus();
+    }
+  }
+
+  void _maybeRestoreFocus() {
+    if (widget.id != widget.initialFocusedId) {
+      return;
+    }
     // If this was the focused route, reclaim focus once the tree is laid out.
     // 若本 route 曾是焦点所在，布局完成后重新夺回焦点。
-    if (widget.id == widget.initialFocusedId) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _node.requestFocus();
-        }
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _node.requestFocus();
+      }
+    });
   }
 
   @override

@@ -154,8 +154,8 @@ class ZeroRoute {
 
   /// A nested shell hosted by this route: navigating into the route reveals the
   /// shell's own tabs / panes. The route's builder receives the nested shell
-  /// widget as its `child` (see [ZeroRouteBuilder]); if the builder ignores the
-  /// child the nested shell will not appear. Mutually exclusive with [routes]
+  /// widget as its `child` (see [ZeroShellRouteBuilder]); if the builder ignores
+  /// the child the nested shell will not appear. Mutually exclusive with [routes]
   /// (use one or the other). / 该路由承载的嵌套 shell：进入该路由即展示其自身的
   /// tabs / panes。路由的 builder 会以 `child` 收到嵌套 shell 组件（见
   /// [ZeroRouteBuilder]）；若 builder 忽略该 child，嵌套 shell 不会显示。与
@@ -415,7 +415,16 @@ class ZeroRouter extends RouterConfig<String> {
   /// (e.g. `#/products/42`). Use it to build real `<a href>` anchors.
   /// web hash 策略下 [location] 的可分享 URL（例如 `#/products/42`）。
   /// 用它构建真实的 `<a href>` 锚点。
-  static String canonicalHref(String location) => '#$location';
+  ///
+  /// Letting [Uri] encode the fragment keeps `/`, `?` and `=` readable while
+  /// escaping characters that would otherwise truncate the URL (a literal `#`,
+  /// spaces, ...). / 交给 [Uri] 编码 fragment：保留 `/`、`?`、`=` 可读，同时
+  /// 转义会截断 URL 的字符（字面 `#`、空格等）。
+  static String canonicalHref(String location) {
+    final normalized = location.isEmpty ? '/' : location;
+    final path = normalized.startsWith('/') ? normalized : '/$normalized';
+    return Uri(fragment: path).toString();
+  }
 
   /// Restore scroll offsets across breakpoint crossings and history changes via
   /// `PageStorage` (one bucket per router). Key a `ScrollView` with

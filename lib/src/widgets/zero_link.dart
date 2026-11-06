@@ -17,6 +17,12 @@ enum ZeroLinkMode {
   /// Pop, then push (`ZeroNav.popAndPushNamed`).
   /// 先 pop 再 push（`ZeroNav.popAndPushNamed`）。
   popAndPush,
+
+  /// Open as a fullscreen overlay above the shell (`ZeroNav.openFullscreen`),
+  /// even when the matched route is not declared `fullscreen`.
+  /// 以覆盖整个 shell 的 fullscreen 覆盖层打开（`ZeroNav.openFullscreen`），
+  /// 即使匹配到的路由并未声明 `fullscreen`。
+  fullscreen,
 }
 
 /// The intent activated by Enter / Space on a focused [ZeroLink].
@@ -64,8 +70,10 @@ class ZeroLink extends StatelessWidget {
   /// The tappable content. / 可点击内容。
   final Widget child;
 
-  /// Overrides the default behavior (open [location]).
-  /// 覆盖默认行为（打开 [location]）。
+  /// Overrides the default behavior (open [location]) for **both** pointer taps
+  /// and keyboard activation (Enter / Space).
+  /// 覆盖默认行为（打开 [location]），对**指针点击与键盘激活**（Enter / Space）
+  /// 同时生效。
   final VoidCallback? onTap;
 
   /// Spoken / braille label for screen readers.
@@ -92,25 +100,28 @@ class ZeroLink extends StatelessWidget {
   /// 手势探测器的命中测试行为。
   final HitTestBehavior behavior;
 
+  static const Map<ShortcutActivator, Intent> _shortcuts =
+      <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): _ZeroLinkActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): _ZeroLinkActivateIntent(),
+      };
+
   @override
   Widget build(BuildContext context) {
     return FocusableActionDetector(
       mouseCursor: cursor ?? _defaultCursor(),
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.enter): _ZeroLinkActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.space): _ZeroLinkActivateIntent(),
-      },
+      shortcuts: _shortcuts,
       actions: <Type, Action<Intent>>{
         _ZeroLinkActivateIntent: CallbackAction<_ZeroLinkActivateIntent>(
           onInvoke: (_) {
-            _activate(context);
+            _handleTap(context);
             return null;
           },
         ),
       },
       child: GestureDetector(
         behavior: behavior,
-        onTap: onTap ?? () => _activate(context),
+        onTap: () => _handleTap(context),
         child: Semantics(
           button: true,
           link: true,
@@ -119,6 +130,15 @@ class ZeroLink extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _handleTap(BuildContext context) {
+    final override = onTap;
+    if (override != null) {
+      override();
+      return;
+    }
+    _activate(context);
   }
 
   void _activate(BuildContext context) {
@@ -134,6 +154,12 @@ class ZeroLink extends StatelessWidget {
         );
       case ZeroLinkMode.popAndPush:
         nav.popAndPushNamed(
+          location,
+          arguments: arguments,
+          preferredTab: tabIndex,
+        );
+      case ZeroLinkMode.fullscreen:
+        nav.openFullscreen(
           location,
           arguments: arguments,
           preferredTab: tabIndex,

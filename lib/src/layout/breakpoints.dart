@@ -42,6 +42,12 @@ class Breakpoints {
   /// Classify a window width into a [BreakpointClass].
   /// 将窗口宽度判定为 [BreakpointClass]。
   BreakpointClass classify(double width) {
+    assert(
+      compactMaxWidth <= expandedMinWidth,
+      'Breakpoints.compactMaxWidth must not exceed expandedMinWidth, otherwise '
+      'the medium class can never be reached. '
+      'Breakpoints.compactMaxWidth 不得大于 expandedMinWidth，否则 medium 档位永远不可达。',
+    );
     if (width < compactMaxWidth) {
       return BreakpointClass.compact;
     }

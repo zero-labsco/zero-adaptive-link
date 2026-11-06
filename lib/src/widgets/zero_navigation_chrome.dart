@@ -66,7 +66,13 @@ class ZeroNavigationChrome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shell = ZeroShellScope.of(context);
-    final index = shell.currentIndex;
+    // A shell with more tabs than destinations must not hand an out-of-range
+    // `selectedIndex` to NavigationBar / NavigationRail (which asserts).
+    // tab 数多于 destinations 时不能把越界的 `selectedIndex` 交给
+    // NavigationBar / NavigationRail（它们会断言失败）。
+    final index = destinations.isEmpty
+        ? 0
+        : shell.currentIndex.clamp(0, destinations.length - 1).toInt();
     void onSelect(int i) => shell.goTab(i);
     if (shell.isExpanded) {
       return Row(

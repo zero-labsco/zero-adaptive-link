@@ -15,6 +15,11 @@ class ZeroRouteState {
   /// Not `const`: every state carries a stable [pageKey] (see below), which
   /// cannot be a constant expression.
   /// 非 `const`：每个状态都携带稳定的 [pageKey]（见下），它不是常量表达式。
+  ///
+  /// Pass [pageKey] to share an existing handoff key (used by [copyWith] and
+  /// by the matcher when it normalises an ancestor location).
+  /// 传入 [pageKey] 可复用已有交接键（[copyWith] 与 matcher 规范化祖先
+  /// location 时会用到）。
   ZeroRouteState({
     required this.fullPath,
     required this.location,
@@ -23,7 +28,8 @@ class ZeroRouteState {
     this.queryParameters = const <String, String>{},
     this.arguments,
     this.data,
-  }) : pageKey = GlobalKey(debugLabel: 'ZeroRoutePage:$location');
+    GlobalKey? pageKey,
+  }) : pageKey = pageKey ?? GlobalKey(debugLabel: 'ZeroRoutePage:$location');
 
   /// Data resolved by a route's `loader`, or `null` before it resolves / when
   /// the route has no loader. Page builders read it to avoid their own
@@ -31,18 +37,20 @@ class ZeroRouteState {
   /// 无 loader 时为 `null`。页面 builder 读取它即可省去自己的 `FutureBuilder`。
   final Object? data;
 
-  /// Returns a copy with [data] replaced (the handoff [pageKey] is preserved so
-  /// the breakpoint handoff still works after the loader resolves).
-  /// 返回把 [data] 替换后的副本（交接用 [pageKey] 保持不变，loader 解析后
-  /// 跨断点交接仍正常工作）。
-  ZeroRouteState copyWith({Object? data}) => ZeroRouteState(
+  /// Returns a copy with [data] and / or [location] replaced. The handoff
+  /// [pageKey] is **preserved**, so the breakpoint handoff still works after a
+  /// loader resolves or after the matcher normalises an ancestor location.
+  /// 返回替换了 [data] 与 / 或 [location] 的副本。交接用 [pageKey] **保持不变**，
+  /// 因此 loader 解析后或 matcher 规范化祖先 location 后，跨断点交接仍正常。
+  ZeroRouteState copyWith({Object? data, String? location}) => ZeroRouteState(
     fullPath: fullPath,
-    location: location,
+    location: location ?? this.location,
     route: route,
     pathParameters: pathParameters,
     queryParameters: queryParameters,
     arguments: arguments,
     data: data,
+    pageKey: pageKey,
   );
 
   /// The full route pattern that matched (e.g. `/products/:id`).
@@ -129,7 +137,12 @@ class ZeroRouteStateScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(ZeroRouteStateScope oldWidget) =>
-      state != oldWidget.state;
+      state.location != oldWidget.state.location ||
+      state.fullPath != oldWidget.state.fullPath ||
+      state.data != oldWidget.state.data ||
+      state.arguments != oldWidget.state.arguments ||
+      state.pageKey != oldWidget.state.pageKey ||
+      state.route != oldWidget.state.route;
 }
 
 /// Signature for `ZeroShellState.goTab`.

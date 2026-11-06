@@ -76,6 +76,14 @@ class ZeroRouteMatcher {
     return prefix == '/' ? '/$cleaned' : '$prefix/$cleaned';
   }
 
+  /// Encode one decoded path segment for a location. A literal `+` is valid in
+  /// a URI path and must survive the round trip unchanged, so it is restored
+  /// after `Uri.encodeComponent` (which would otherwise rewrite it as `%2B`).
+  /// 编码一个已解码的路径片段。字面 `+` 在 URI path 中合法且必须原样往返，
+  /// 因此在 `Uri.encodeComponent` 之后还原（否则会被改写成 `%2B`）。
+  static String encodeSegment(String segment) =>
+      Uri.encodeComponent(segment).replaceAll('%2B', '+');
+
   /// Match [location] against [routes], returning the ordered match stack or
   /// `null` when nothing matches.
   /// 将 [location] 与 [routes] 匹配，返回有序匹配栈；无匹配时返回 `null`。
@@ -90,6 +98,11 @@ class ZeroRouteMatcher {
         .where((segment) => segment.isNotEmpty)
         .toList();
     final query = uri.queryParameters;
+    // Keep the *raw* query string: rebuilding it from `queryParameters` dropped
+    // duplicate keys, rewrote `%20` as `+` and turned `?flag` into `?flag=`.
+    // 保留*原始* query 字符串：由 `queryParameters` 重建会丢重复键、把 `%20`
+    // 改写成 `+`、把 `?flag` 变成 `?flag=`。
+    final rawQuery = uri.query;
     final matches = _matchTree(
       routes: routes,
       segments: segments,
@@ -97,9 +110,38 @@ class ZeroRouteMatcher {
       actualPrefix: '/',
       inheritedParams: const <String, String>{},
       query: query,
+      rawQuery: rawQuery,
       arguments: arguments,
     );
-    return matches == null ? null : MatchList(matches);
+    if (matches == null) {
+      return null;
+    }
+    if (rawQuery.isEmpty || matches.length < 2) {
+      return MatchList(matches);
+    }
+    // Only the leaf carries the query. Ancestor matches describe paths; if the
+    // query were stamped onto every one of them, a query-only change would look
+    // like a completely different stack (common prefix 0) and every ancestor
+    // would be pushed again. `copyWith` preserves the handoff `pageKey`.
+    // 只有叶子携带 query。祖先匹配描述的是路径；若每一层都拼上 query，仅
+    // query 变化会被当成完全不同的栈（公共前缀 0），祖先条目会被重复压栈。
+    // `copyWith` 会保留交接用的 `pageKey`。
+    return MatchList(<ZeroRouteMatch>[
+      for (var i = 0; i < matches.length - 1; i++)
+        ZeroRouteMatch(
+          route: matches[i].route,
+          state: matches[i].state.copyWith(
+            location: _pathOnly(matches[i].state.location),
+          ),
+          title: matches[i].title,
+        ),
+      matches.last,
+    ]);
+  }
+
+  static String _pathOnly(String location) {
+    final marker = location.indexOf('?');
+    return marker < 0 ? location : location.substring(0, marker);
   }
 
   static List<ZeroRouteMatch>? _matchTree({
@@ -109,6 +151,7 @@ class ZeroRouteMatcher {
     required String actualPrefix,
     required Map<String, String> inheritedParams,
     required Map<String, String> query,
+    required String rawQuery,
     required Object? arguments,
   }) {
     for (final route in routes) {
@@ -136,7 +179,7 @@ class ZeroRouteMatcher {
       final newActualPrefix = _joinActual(actualPrefix, segments, consumed);
       final state = ZeroRouteState(
         fullPath: newPatternPrefix,
-        location: _withQuery(newActualPrefix, query),
+        location: _withQuery(newActualPrefix, rawQuery),
         route: route,
         pathParameters: params,
         queryParameters: query,
@@ -161,7 +204,22 @@ class ZeroRouteMatcher {
           // exactly like a top-level tab falls back to its default. / location
           // 止于 shell 宿主：下钻进 shell 的默认 tab（其首条路由或 `initialLocation`）
           // 使其内容显示，正如顶层 tab 回退到默认值。
-          final defaultTab = route.shell!.tabs.first;
+          final tabs = route.shell!.tabs;
+          assert(
+            tabs.isNotEmpty,
+            'A nested ZeroShell needs at least one ZeroTab. '
+            '嵌套 ZeroShell 至少需要一个 ZeroTab。',
+          );
+          if (tabs.isEmpty) {
+            return <ZeroRouteMatch>[match];
+          }
+          final defaultTab = tabs.first;
+          assert(
+            defaultTab.routes.isNotEmpty || defaultTab.initialLocation != null,
+            'Every nested ZeroTab needs at least one ZeroRoute or an '
+            'initialLocation. 每个嵌套 ZeroTab 至少需要一条 ZeroRoute 或'
+            '一个 initialLocation。',
+          );
           // A nested tab's `initialLocation` is a *full* location
           // (`/settings/profile`) while its route paths are authored relative to
           // the host (`/profile`). The descent matches the segments that follow
@@ -178,9 +236,11 @@ class ZeroRouteMatcher {
             relativeDefault = initial.startsWith('$newActualPrefix/')
                 ? initial.substring(newActualPrefix.length + 1)
                 : (initial.startsWith('/') ? initial.substring(1) : initial);
-          } else {
+          } else if (defaultTab.routes.isNotEmpty) {
             final path = defaultTab.routes.first.path;
             relativeDefault = path.startsWith('/') ? path.substring(1) : path;
+          } else {
+            return <ZeroRouteMatch>[match];
           }
           final deeper = _matchTree(
             routes: children,
@@ -189,11 +249,17 @@ class ZeroRouteMatcher {
             actualPrefix: newActualPrefix,
             inheritedParams: params,
             query: query,
+            rawQuery: rawQuery,
             arguments: arguments,
           );
-          if (deeper != null) return [match, ...deeper];
+          // A default tab that fails to match must not turn the whole location
+          // into an error page — the host itself is still a valid match.
+          // 默认 tab 匹配失败不应让整个 location 变成错误页——宿主本身仍是有效匹配。
+          return deeper == null
+              ? <ZeroRouteMatch>[match]
+              : <ZeroRouteMatch>[match, ...deeper];
         } else {
-          return [match];
+          return <ZeroRouteMatch>[match];
         }
       }
       final deeper = _matchTree(
@@ -203,10 +269,11 @@ class ZeroRouteMatcher {
         actualPrefix: newActualPrefix,
         inheritedParams: params,
         query: query,
+        rawQuery: rawQuery,
         arguments: arguments,
       );
       if (deeper != null) {
-        return [match, ...deeper];
+        return <ZeroRouteMatch>[match, ...deeper];
       }
       // The route matched a prefix but no child matched the remainder: the
       // location is not expressible by this route, so try the next sibling
@@ -226,16 +293,16 @@ class ZeroRouteMatcher {
       // 重新编码：`Uri.parse` 会解码片段，原样拼回会改写 location
       // （`/products/a%20b` → `/products/a b`），与 `namedLocation`（会编码）
       // 和地址栏脱节。
-      final segment = Uri.encodeComponent(segments[i]);
+      final segment = encodeSegment(segments[i]);
       result = result == '/' ? '/$segment' : '$result/$segment';
     }
     return result;
   }
 
-  static String _withQuery(String path, Map<String, String> query) {
+  static String _withQuery(String path, String query) {
     if (query.isEmpty) {
       return path;
     }
-    return '$path?${Uri(queryParameters: query).query}';
+    return '$path?$query';
   }
 }

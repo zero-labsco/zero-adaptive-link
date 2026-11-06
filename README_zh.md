@@ -17,7 +17,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 [![Dart](https://img.shields.io/badge/Dart-✓-0175C2?logo=dart)](https://dart.dev)
 [![Style: effective dart](https://img.shields.io/badge/style-effective_dart-40c4ff.svg)](https://pub.dev/packages/effective_dart)
 
-> **🔔 推荐升级：** `0.5.0` 新增嵌套 `ZeroShell`（通过 `ZeroRoute.shell` + `shellBuilder` 让某条路由拥有自己的 tabs / panes）、真实的 web `<a href>` 锚点（链接可在新标签打开且预览正常），以及跨断点切换与浏览器历史变化的滚动与焦点恢复。同时保留 `ZeroLink` 无障碍、`ZeroRouter.onNavigation`、`ZeroRoute.loader`、滑动收起、`ZeroNavigationChrome`、compact / medium 面包屑与显式的 `preferredTab` / `ZeroLink.tabIndex`。建议所有用户升级到最新版本（`^0.5.0`）。
+> **🔔 推荐升级：** `0.6.0` 修复仅 query 变化导致页面栈重复压栈的问题，保留 loader 更新时的 `ZeroRouteState.pageKey`，并补齐缺失的 `ZeroLinkMode.fullscreen` / `ZeroNav.openFullscreen`。同时让 web 锚点、嵌套路由名称、面包屑、滑动收起、`namedLocation` 与拖拽处理与文档行为一致。建议所有用户升级到最新版本（`^0.6.0`）。
 
 🌐 **[官方网站](https://www.zerolabsco.com/)** &nbsp;·&nbsp; 📦 **[pub.dev 页面](https://pub.dev/packages/zero_adaptive_link)** &nbsp;·&nbsp; 🔗 **[GitHub 仓库](https://github.com/zero-labsco/zero-adaptive-link)**
 
@@ -73,7 +73,7 @@ Flutter 的自适应导航：只写**一套 `onTap`**，插件按窗口宽度做
 
 ```yaml
 dependencies:
-  zero_adaptive_link: ^0.5.0
+  zero_adaptive_link: ^0.6.0
 ```
 
 ### GitHub
@@ -83,7 +83,7 @@ dependencies:
   zero_adaptive_link:
     git:
       url: https://github.com/zero-labsco/zero-adaptive-link.git
-      ref: release/v0.5.0   # 将 0.5.0 替换为所需版本
+      ref: release/v0.6.0   # 将 0.6.0 替换为所需版本
 ```
 
 ---

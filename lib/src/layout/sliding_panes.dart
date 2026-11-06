@@ -198,7 +198,10 @@ class _SlidingPanesState extends State<SlidingPanes>
   @override
   void initState() {
     super.initState();
-    _fraction = widget.leftPaneFraction;
+    // Clamp the initial fraction too: `_masterWidthFor` only clamps during
+    // layout, so the first frame could otherwise use an out-of-range value.
+    // 初始值也要夹取：`_masterWidthFor` 只在布局时夹取，否则首帧可能使用越界值。
+    _fraction = widget.leftPaneFraction.clamp(0.15, 0.85);
     // Retire the exiting panes once their animation finishes: leaving them
     // mounted would keep defunct page subtrees (and their GlobalKeys) alive
     // forever. / 动画结束后即退下还在挂载的 pane：一直挂着会让已失效的页面
@@ -381,12 +384,21 @@ class _SlidingPanesState extends State<SlidingPanes>
     widget.onLeftPaneFractionChanged?.call(fraction);
   }
 
-  void _onDragEnd(DragEndDetails details) {
+  void _onDragEnd(DragEndDetails details) => _finishDrag();
+
+  /// A gesture can be cancelled (system gesture, pointer stolen, ...) without
+  /// an end callback; leaving `_dragActive` true would then permanently block
+  /// `leftPaneFraction` updates from the parent.
+  /// 手势可能在没有 end 回调的情况下被取消（系统手势、指针被抢占等）；若
+  /// `_dragActive` 保持为 true，父级后续对 `leftPaneFraction` 的更新会被永久屏蔽。
+  void _onDragCancel() => _finishDrag();
+
+  void _finishDrag() {
     setState(() {
       _dragStartX = 0;
       _dragActive = false;
     });
-    widget.onLeftPaneFractionDragEnd?.call(_fraction);
+    widget.onLeftPaneFractionDragEnd?.call(_fraction.clamp(0.15, 0.85));
   }
 
   Widget _wrapPane(BuildContext context, Widget pane, bool isLeft) {
@@ -415,6 +427,7 @@ class _SlidingPanesState extends State<SlidingPanes>
       onHorizontalDragStart: _onDragStart,
       onHorizontalDragUpdate: _onDragUpdate,
       onHorizontalDragEnd: _onDragEnd,
+      onHorizontalDragCancel: _onDragCancel,
       child: visual,
     );
   }
@@ -444,6 +457,12 @@ class _SlidingPanesState extends State<SlidingPanes>
   @override
   Widget build(BuildContext context) {
     final count = widget.children.length;
+    assert(
+      count <= 2,
+      'SlidingPanes supports at most two children (master + detail); extra '
+      'children are silently ignored. '
+      'SlidingPanes 最多支持两个 child（master + detail）；多余的会被静默忽略。',
+    );
     if (count == 0) {
       return const SizedBox.shrink();
     }
@@ -479,14 +498,21 @@ class _SlidingPanesState extends State<SlidingPanes>
             final detailWidth = total - handleWidth - masterWidth;
             final masterChild = _wrapPane(context, master, masterIsLeft);
             var detailChild = _wrapPane(context, detail!, !masterIsLeft);
-            // Swipe the detail pane left to dismiss it (a quick leftward
-            // flick). / 左滑 detail pane 即可收起（快速向左一拂）。
+            // Swipe the detail pane off-screen to dismiss it. With the default
+            // side the detail sits on the right, so the flick goes left→right;
+            // mirror the direction when the layout is flipped.
+            // 把 detail pane 滑出屏幕以收起。默认方向下 detail 在右侧，因此
+            // 手势为从左向右；布局镜像时方向随之翻转。
             if (widget.onDismissDetail != null && count >= 2) {
+              final toRight = widget.side == SlidingPanesSide.right;
               detailChild = GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onHorizontalDragEnd: (details) {
-                  if (details.primaryVelocity != null &&
-                      details.primaryVelocity! < -300) {
+                  final velocity = details.primaryVelocity;
+                  if (velocity == null) {
+                    return;
+                  }
+                  if (toRight ? velocity > 300 : velocity < -300) {
                     widget.onDismissDetail?.call();
                   }
                 },

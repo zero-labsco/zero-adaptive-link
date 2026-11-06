@@ -1,13 +1,56 @@
 # Changelog
 
+## 0.6.0
+
+### Added / 新增
+
+- Added `ZeroLinkMode.fullscreen` and `ZeroNav.openFullscreen`: any matched location can now be opened as a fullscreen overlay above the shell, even when its route does not declare `fullscreen`. `ZeroAnchor` falls back to `ZeroLink` for non-push modes so web and native agree.
+  - 新增 `ZeroLinkMode.fullscreen` 与 `ZeroNav.openFullscreen`：现在可把任意匹配到的 location 以覆盖 shell 的 fullscreen 覆盖层打开，即使其路由未声明 `fullscreen`。非 push 模式下 `ZeroAnchor` 回退到 `ZeroLink`，使 web 与原生行为一致。
+- Exported `ZeroShellRouteBuilder` and `ZeroGoTabCallback` from the barrel, so the public field types of `ZeroRoute.shellBuilder` and `ZeroShellState.goTab` can be referenced by consumers.
+  - 从 barrel 导出 `ZeroShellRouteBuilder` 与 `ZeroGoTabCallback`，使 `ZeroRoute.shellBuilder` 和 `ZeroShellState.goTab` 的公开字段类型可被使用方引用。
+- Added `ZeroRouteMatcher.encodeSegment` (shared by the matcher and `namedLocation`) and friendly asserts for nested empty tabs, `shell` / `routes` exclusivity, breakpoint thresholds and more than two `SlidingPanes` children.
+  - 新增 `ZeroRouteMatcher.encodeSegment`（供 matcher 与 `namedLocation` 共用），并为嵌套空 tab、`shell` / `routes` 互斥、断点阈值以及 `SlidingPanes` 超过两个 child 补上友好断言。
+
+### Changed / 优化
+
+- `ZeroRouter.canonicalHref` now builds the fragment with `Uri`, so a literal `#`, spaces and other hazards are escaped instead of truncating the shareable URL.
+  - `ZeroRouter.canonicalHref` 现在用 `Uri` 构造 fragment，字面 `#`、空格等字符会被转义，不再截断可分享 URL。
+- `ZeroRouteStateScope.updateShouldNotify` compares observable fields instead of object identity; `ZeroNavigationChrome` clamps an out-of-range tab index; the default loader error page shows the exception; redirect cycles are detected as soon as a location repeats.
+  - `ZeroRouteStateScope.updateShouldNotify` 改为比较可观察字段而非对象身份；`ZeroNavigationChrome` 夹取越界的 tab 下标；默认 loader 错误页显示异常对象；重定向一旦出现重复 location 即判定为环。
+- Documentation now matches the code: `ZeroLink` is a `FocusableActionDetector`, the 0.4.0 swipe direction is described as left-to-right in both languages, and 0.5.0 credits the DOM anchor to `ZeroAnchor` rather than `ZeroLink`.
+  - 文档与代码对齐：`ZeroLink` 现描述为 `FocusableActionDetector`；0.4.0 滑动方向在中英文中统一为从左向右；0.5.0 的真实 DOM 锚点归到 `ZeroAnchor` 而非 `ZeroLink`。
+
+### Fixed / 修复
+
+- Fixed a query-only navigation duplicating the whole page stack: only the leaf match carries the query and a query change now reconciles the leaf in place, so back, breadcrumbs and `isDetailOpen` stay correct. Raw query strings and literal `+` path characters also round-trip unchanged.
+  - 修复仅 query 变化会把整条页面栈重复压栈的问题：现在只有叶子匹配携带 query，query 变化时就地协调叶子，返回栈、面包屑与 `isDetailOpen` 因此保持正确；原始 query 字符串与路径中的字面 `+` 也能原样往返。
+- Fixed `ZeroRouteState.copyWith` discarding `pageKey`, which broke the breakpoint handoff for routes with a `loader`. The inner route-state scope no longer reuses the outer `GlobalKey`.
+  - 修复 `ZeroRouteState.copyWith` 丢弃 `pageKey` 的问题（它会破坏带 `loader` 路由的跨断点交接）；内层 route-state scope 不再复用外层 `GlobalKey`。
+- Fixed `ZeroLink.onTap` being ignored on Enter / Space, and fixed `ZeroLinkMode.fullscreen` being documented but absent.
+  - 修复 `ZeroLink.onTap` 在 Enter / Space 激活时被忽略的问题，并补齐了文档已宣传却不存在的 `ZeroLinkMode.fullscreen`。
+- Fixed the web `ZeroAnchor` re-registering its platform view factory on every build; it now registers once per mounted state, updates the DOM element in place and keeps `mode` / `tabIndex` / `arguments` consistent with non-web platforms.
+  - 修复 web 版 `ZeroAnchor` 每次 build 都重注册 platform view factory 的问题；现在每个挂载的 State 只注册一次、原地更新 DOM 元素，并让 `mode` / `tabIndex` / `arguments` 与非 web 平台一致。
+- Fixed `namedLocation` corrupting longer parameter names with `replaceAll` and returning unresolved placeholders; whole `:param` tokens are replaced and a missing parameter returns `null`.
+  - 修复 `namedLocation` 用 `replaceAll` 破坏更长参数名、以及参数缺失时返回残留占位符的问题；现在只替换完整 `:param` 标记，参数缺失返回 `null`。
+- Fixed nested-shell route names never being registered (and duplicate names never asserted), breadcrumb clicks truncating the outer stack with a sub-stack index, and nested `goTab` joining a tab path onto a host location that carries a query.
+  - 修复嵌套 shell 的路由名从未注册（重名也因此不触发断言）、面包屑点击用 sub-stack 下标截断外层栈、以及嵌套 `goTab` 把 tab 路径拼到带 query 的宿主 location 上的问题。
+- Fixed `pushReplacementNamed` and `pushNamedAndRemoveUntil` mutating the stack before their async resolve, which bypassed the generation guard and left an unannounced truncated stack when superseded.
+  - 修复 `pushReplacementNamed` 与 `pushNamedAndRemoveUntil` 在异步解析之前就改栈的问题：这曾绕过 generation 守卫，在被取代时留下未通知的残缺栈。
+- Fixed a resize-handle gesture cancellation leaving `_dragActive` stuck forever, and mirrored the detail-pane swipe-to-dismiss direction with `paneSide`.
+  - 修复拖拽分割线的手势被取消后 `_dragActive` 永久卡住的问题，并让 detail pane 的滑动收起方向随 `paneSide` 镜像。
+- Fixed focusing an existing entry while a fullscreen overlay was open (the URL snapped back to the overlay), `_onDidRemovePage` leaving discarded push futures pending, `canPop` ignoring framework routes, `refresh()` clearing an open overlay, and `_ImperativeRouteCounter.didReplace` shifting its count on null routes.
+  - 修复覆盖层打开时聚焦已有条目会让 URL 跳回覆盖层、`_onDidRemovePage` 让被遗弃的 push Future 永久挂起、`canPop` 忽略框架级路由、`refresh()` 清掉已打开覆盖层，以及 `_ImperativeRouteCounter.didReplace` 在 route 为 null 时计数偏移的问题。
+- Fixed `onNavigation` firing during delegate construction, focus restoration only running in `initState`, `_setTabStack` reusing an entry with stale `arguments`, and nested default tabs turning the whole location into an error page when they fail to match.
+  - 修复 `onNavigation` 在 delegate 构造期触发、焦点恢复只在 `initState` 执行、`_setTabStack` 复用带旧 `arguments` 的条目，以及嵌套默认 tab 匹配失败时把整个 location 变成错误页的问题。
+
 ## 0.5.0
 
 ### Added / 新增
 
 - Nested `ZeroShell`: a `ZeroRoute` can now host a `ZeroShell` via `ZeroRoute.shell`; its `shellBuilder` receives the nested shell widget as its `child`. Route tables nest arbitrarily deep, and each shell derives its active tab and renders its own tabs / panes from the same flat location stack — so a deep link like `#/settings/profile` restores both the outer tab and the nested one. The delegate re-resolves the whole (flat) match stack on every navigation, so a nested shell needs no private state machine.
   - 嵌套 `ZeroShell`：现在 `ZeroRoute` 可通过 `ZeroRoute.shell` 承载一个 `ZeroShell`，其 `shellBuilder` 会以嵌套 shell 组件作为 `child` 收到。路由表可任意深度嵌套，每个 shell 都从同一份（扁平）location 栈推导出自己的活动 tab 并渲染自身的 tabs / panes——因此 `#/settings/profile` 这样的深链会同时恢复外层与内层 tab。delegate 在每次导航时重新解析整条（扁平）匹配栈，嵌套 shell 因而无需私有状态机。
-- Real web anchors: `ZeroLink` (and the new `ZeroAnchor`) can render a genuine DOM `<a href="#/...">` on web via `dart:js_interop`, so right-click "open in new tab" and link previews work; clicks are still routed through the router (no full reload). `ZeroRouter.canonicalHref(location)` returns the shareable hash URL.
-  - 真实 web 锚点：`ZeroLink`（以及新增的 `ZeroAnchor`）在 web 上可通过 `dart:js_interop` 渲染真正的 DOM `<a href="#/...">`，使右键"在新标签打开"与链接预览可用；点击仍走路由（不会整页刷新）。`ZeroRouter.canonicalHref(location)` 返回可分享的 hash URL。
+- Real web anchors: the new `ZeroAnchor` renders a genuine DOM `<a href="#/...">` on web via `dart:js_interop`, so right-click "open in new tab" and link previews work; clicks are still routed through the router (no full reload). `ZeroLink` stays a widget-level link. `ZeroRouter.canonicalHref(location)` returns the shareable hash URL.
+  - 真实 web 锚点：新增的 `ZeroAnchor` 在 web 上通过 `dart:js_interop` 渲染真正的 DOM `<a href="#/...">`，使右键「在新标签打开」与链接预览可用；点击仍走路由（不会整页刷新）。`ZeroLink` 仍是组件级链接。`ZeroRouter.canonicalHref(location)` 返回可分享的 hash URL。
 - Scroll & focus restoration: `ZeroRouter` enables `PageStorage`-based scroll restoration (one bucket per router) and restores primary focus across breakpoint crossings and browser history changes. Route content is keyed so it survives the handoff; opt out with `restoreScrollOffset: false` / `restoreFocus: false`.
   - 滚动与焦点恢复：`ZeroRouter` 启用基于 `PageStorage` 的滚动恢复（每个 router 一个桶），并在跨断点切换与浏览器历史变化时恢复主焦点。路由内容以键标记以在交接中存活；可用 `restoreScrollOffset: false` / `restoreFocus: false` 关闭。
 
@@ -43,7 +86,7 @@
 - Added `ZeroRoute.loader`: an optional `Future` that resolves route arguments before the page builds. While pending the pane / page shows `loadingBuilder` (default spinner); on error it shows `errorBuilder`. This lets the adaptive layer own the data round-trip instead of every page wiring its own `FutureBuilder`.
   - 新增 `ZeroRoute.loader`：在页面构建前解析路由参数的可选 `Future`。等待期间 pane / 页面显示 `loadingBuilder`（默认 spinner），出错时显示 `errorBuilder`。自适应层由此包办数据往返，无需每个页面各自接 `FutureBuilder`。
 - Added swipe-to-dismiss for the detail pane on expanded widths: a left-to-right swipe on the detail pane collapses it (mirroring iOS split-view dismissal), in addition to the existing resize-handle drag.
-  - expanded 宽度下新增右栏滑动收起：在 detail pane 上左滑即可收起（与 iOS split view 一致），原有拖拽分割线改比例仍保留。
+  - expanded 宽度下新增右栏滑动收起：在 detail pane 上从左向右滑即可收起（与 iOS split view 一致），原有拖拽分割线改比例仍保留。
 - Added `showBreadcrumbsOnBranch` to `ZeroRouter` (default `false`): when `true`, the breadcrumb bar also renders inside the compact / medium branch `AppBar`, so the three widths stay consistent instead of only showing breadcrumbs on expanded.
   - 新增 `ZeroRouter.showBreadcrumbsOnBranch`（默认 `false`）：为 true 时面包屑栏也会渲染进 compact / medium 的 branch `AppBar`，使三档宽度表现一致，而非仅在 expanded 显示。
 - Added `ZeroNavigationChrome`, a responsive shell chrome that switches between a `NavigationRail` (expanded) and a bottom `NavigationBar` (compact / medium) automatically from the window width, so applications no longer have to hand-wire the two themselves.

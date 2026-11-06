@@ -43,10 +43,12 @@ export 'src/router/router.dart'
         ZeroRouterRedirect,
         ZeroShell,
         ZeroShellBuilder,
+        ZeroShellRouteBuilder,
         ZeroTab,
         ZeroTitleBuilder;
 export 'src/router/state.dart'
     show
+        ZeroGoTabCallback,
         ZeroPaneScope,
         ZeroRouteState,
         ZeroRouteStateScope,

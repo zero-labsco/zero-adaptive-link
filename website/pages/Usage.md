@@ -11,9 +11,9 @@ ZeroLink(
 );
 ```
 
-`ZeroLink` wraps its child in `GestureDetector + MouseRegion` (hand cursor on web / desktop) and does not require a Material ancestor. Pass `onTap` to override the default open behavior.
+`ZeroLink` wraps its child in a `FocusableActionDetector` + `GestureDetector` (hand cursor on web / desktop, Enter / Space activation) and does not require a Material ancestor. Pass `onTap` to override the default open behavior for both pointer taps and keyboard activation.
 
-`ZeroLink` 用 `GestureDetector + MouseRegion` 包裹子组件（web / 桌面显示手型光标），不强制 Material 祖先。传 `onTap` 可覆盖默认行为。
+`ZeroLink` 用 `FocusableActionDetector + GestureDetector` 包裹子组件（web / 桌面显示手型光标，支持 Enter / Space 激活），不强制 Material 祖先。传 `onTap` 可同时覆盖指针点击与键盘激活的默认行为。
 
 ### Imperative: `ZeroNav` / 命令式
 
